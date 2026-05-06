@@ -16,6 +16,7 @@ import { api } from '@renderer/api';
 import { confirm } from '@renderer/components/common/ConfirmDialog';
 import { useStore } from '@renderer/store';
 import { generateUUID } from '@renderer/utils/stringUtils';
+import { normalizeSshAuthMethod } from '@shared/types';
 import { Edit2, Loader2, Plus, Save, Server, Trash2, X } from 'lucide-react';
 
 import { SettingsSectionHeader } from '../components/SettingsSectionHeader';
@@ -31,9 +32,7 @@ const inputStyle = {
 };
 
 const authMethodOptions: readonly { value: SshAuthMethod; label: string }[] = [
-  { value: 'auto', label: 'Auto (from SSH Config)' },
-  { value: 'agent', label: 'SSH Agent' },
-  { value: 'privateKey', label: 'Private Key' },
+  { value: 'sshConfig', label: 'SSH Config (recommended)' },
   { value: 'password', label: 'Password' },
 ];
 
@@ -42,8 +41,7 @@ const defaultForm = {
   host: '',
   port: '22',
   username: '',
-  authMethod: 'auto' as SshAuthMethod,
-  privateKeyPath: '',
+  authMethod: 'sshConfig' as SshAuthMethod,
 };
 
 export const WorkspaceSection = (): React.JSX.Element => {
@@ -58,7 +56,6 @@ export const WorkspaceSection = (): React.JSX.Element => {
   const [formPort, setFormPort] = useState(defaultForm.port);
   const [formUsername, setFormUsername] = useState(defaultForm.username);
   const [formAuthMethod, setFormAuthMethod] = useState<SshAuthMethod>(defaultForm.authMethod);
-  const [formPrivateKeyPath, setFormPrivateKeyPath] = useState(defaultForm.privateKeyPath);
 
   const resetForm = useCallback(() => {
     setFormName(defaultForm.name);
@@ -66,7 +63,6 @@ export const WorkspaceSection = (): React.JSX.Element => {
     setFormPort(defaultForm.port);
     setFormUsername(defaultForm.username);
     setFormAuthMethod(defaultForm.authMethod);
-    setFormPrivateKeyPath(defaultForm.privateKeyPath);
   }, []);
 
   const loadProfiles = useCallback(async () => {
@@ -95,8 +91,7 @@ export const WorkspaceSection = (): React.JSX.Element => {
         setFormHost(profile.host);
         setFormPort(String(profile.port));
         setFormUsername(profile.username);
-        setFormAuthMethod(profile.authMethod);
-        setFormPrivateKeyPath(profile.privateKeyPath ?? '');
+        setFormAuthMethod(normalizeSshAuthMethod(profile.authMethod));
       }
     }
   }, [editingId, profiles]);
@@ -109,7 +104,6 @@ export const WorkspaceSection = (): React.JSX.Element => {
       port: parseInt(formPort, 10) || 22,
       username: formUsername.trim(),
       authMethod: formAuthMethod,
-      privateKeyPath: formAuthMethod === 'privateKey' ? formPrivateKeyPath.trim() : undefined,
     };
 
     await api.config.update('ssh', { profiles: [...profiles, newProfile] });
@@ -129,7 +123,7 @@ export const WorkspaceSection = (): React.JSX.Element => {
             port: parseInt(formPort, 10) || 22,
             username: formUsername.trim(),
             authMethod: formAuthMethod,
-            privateKeyPath: formAuthMethod === 'privateKey' ? formPrivateKeyPath.trim() : undefined,
+            privateKeyPath: undefined,
           }
         : p
     );
@@ -261,25 +255,11 @@ export const WorkspaceSection = (): React.JSX.Element => {
         />
       </div>
 
-      {formAuthMethod === 'privateKey' && (
-        <div>
-          <label
-            htmlFor="ws-profile-private-key-path"
-            className="mb-1 block text-xs"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            Private Key Path
-          </label>
-          <input
-            id="ws-profile-private-key-path"
-            type="text"
-            value={formPrivateKeyPath}
-            onChange={(e) => setFormPrivateKeyPath(e.target.value)}
-            placeholder="~/.ssh/id_rsa"
-            className={inputClass}
-            style={inputStyle}
-          />
-        </div>
+      {formAuthMethod === 'sshConfig' && (
+        <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          Authentication is delegated to your <code>~/.ssh/config</code> (IdentityFile,
+          IdentityAgent, agent forwarding all honored).
+        </p>
       )}
 
       {formAuthMethod === 'password' && (

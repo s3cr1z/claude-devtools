@@ -220,8 +220,26 @@ export type SshConnectionState = 'disconnected' | 'connecting' | 'connected' | '
 
 /**
  * SSH authentication method.
+ *
+ * - `sshConfig`: Defer to the system OpenSSH client's resolution of `~/.ssh/config`
+ *   (handles IdentityFile, IdentityAgent, agent socket discovery, default keys).
+ * - `password`: Manual password fallback for hosts without keys.
+ *
+ * Legacy persisted values (`auto`, `agent`, `privateKey`) are normalized to
+ * `sshConfig` via {@link normalizeSshAuthMethod} when read from disk.
  */
-export type SshAuthMethod = 'password' | 'privateKey' | 'agent' | 'auto';
+export type SshAuthMethod = 'sshConfig' | 'password';
+
+/**
+ * Coerces persisted SSH auth method values to the current union.
+ *
+ * The previous union exposed four methods (`auto`, `agent`, `privateKey`, `password`).
+ * The first three are now folded into `sshConfig`, which delegates to the user's
+ * `~/.ssh/config` exactly the way `ssh <host>` from a terminal would.
+ */
+export function normalizeSshAuthMethod(raw: unknown): SshAuthMethod {
+  return raw === 'password' ? 'password' : 'sshConfig';
+}
 
 /**
  * SSH config host entry resolved from ~/.ssh/config.
@@ -236,6 +254,11 @@ export interface SshConfigHostEntry {
 
 /**
  * SSH connection configuration sent from renderer.
+ *
+ * Identity files / agent sockets are not part of this payload — `sshConfig`
+ * mode resolves them via the system `ssh` binary. The `privateKeyPath` field
+ * is retained as an optional legacy carry-over so older persisted profiles
+ * still type-check; it is ignored at connect time.
  */
 export interface SshConnectionConfig {
   host: string;
@@ -243,6 +266,7 @@ export interface SshConnectionConfig {
   username: string;
   authMethod: SshAuthMethod;
   password?: string;
+  /** @deprecated Replaced by IdentityFile resolution via `ssh -G`. Ignored. */
   privateKeyPath?: string;
 }
 
@@ -256,6 +280,7 @@ export interface SshConnectionProfile {
   port: number;
   username: string;
   authMethod: SshAuthMethod;
+  /** @deprecated Replaced by IdentityFile resolution via `ssh -G`. Ignored. */
   privateKeyPath?: string;
 }
 
@@ -280,6 +305,7 @@ export interface SshLastConnection {
   port: number;
   username: string;
   authMethod: SshAuthMethod;
+  /** @deprecated Replaced by IdentityFile resolution via `ssh -G`. Ignored. */
   privateKeyPath?: string;
 }
 

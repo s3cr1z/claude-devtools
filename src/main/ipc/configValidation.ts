@@ -375,7 +375,9 @@ function isValidSshProfile(profile: unknown): boolean {
   if (typeof profile.host !== 'string') return false;
   if (typeof profile.port !== 'number') return false;
   if (typeof profile.username !== 'string') return false;
-  const validMethods = ['password', 'privateKey', 'agent', 'auto'];
+  // Accept current values plus legacy ('auto', 'agent', 'privateKey') so older
+  // configs round-trip; legacy values are normalized to 'sshConfig' on read.
+  const validMethods = ['password', 'sshConfig', 'auto', 'agent', 'privateKey'];
   if (!validMethods.includes(profile.authMethod as string)) return false;
   return true;
 }

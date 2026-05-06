@@ -290,7 +290,7 @@ export interface AppConfig {
       host: string;
       port: number;
       username: string;
-      authMethod: 'password' | 'privateKey' | 'agent' | 'auto';
+      authMethod: 'password' | 'sshConfig';
       privateKeyPath?: string;
     } | null;
     /** Whether to auto-reconnect on launch */
@@ -302,7 +302,7 @@ export interface AppConfig {
       host: string;
       port: number;
       username: string;
-      authMethod: 'password' | 'privateKey' | 'agent' | 'auto';
+      authMethod: 'password' | 'sshConfig';
       privateKeyPath?: string;
     }[];
     /** Last active context ID */

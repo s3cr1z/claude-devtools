@@ -189,7 +189,6 @@ export function registerSshHandlers(ipcMain: IpcMain): void {
           port: config.port,
           username: config.username,
           authMethod: config.authMethod,
-          privateKeyPath: config.privateKeyPath,
         },
       });
       return { success: true };

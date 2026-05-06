@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '@renderer/api';
 import { useStore } from '@renderer/store';
+import { normalizeSshAuthMethod } from '@shared/types';
 import { Loader2, Monitor, Server, Wifi, WifiOff } from 'lucide-react';
 
 import { SettingRow } from '../components/SettingRow';
@@ -27,9 +28,7 @@ import type {
 } from '@shared/types';
 
 const authMethodOptions: readonly { value: SshAuthMethod; label: string }[] = [
-  { value: 'auto', label: 'Auto (from SSH Config)' },
-  { value: 'agent', label: 'SSH Agent' },
-  { value: 'privateKey', label: 'Private Key' },
+  { value: 'sshConfig', label: 'SSH Config (recommended)' },
   { value: 'password', label: 'Password' },
 ];
 
@@ -49,9 +48,8 @@ export const ConnectionSection = (): React.JSX.Element => {
   const [host, setHost] = useState('');
   const [port, setPort] = useState('22');
   const [username, setUsername] = useState('');
-  const [authMethod, setAuthMethod] = useState<SshAuthMethod>('auto');
+  const [authMethod, setAuthMethod] = useState<SshAuthMethod>('sshConfig');
   const [password, setPassword] = useState('');
-  const [privateKeyPath, setPrivateKeyPath] = useState('~/.ssh/id_rsa');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
 
@@ -102,10 +100,7 @@ export const ConnectionSection = (): React.JSX.Element => {
       setHost(lastSshConfig.host);
       setPort(String(lastSshConfig.port));
       setUsername(lastSshConfig.username);
-      setAuthMethod(lastSshConfig.authMethod);
-      if (lastSshConfig.privateKeyPath) {
-        setPrivateKeyPath(lastSshConfig.privateKeyPath);
-      }
+      setAuthMethod(normalizeSshAuthMethod(lastSshConfig.authMethod));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time prefill when async data arrives
   }, [lastSshConfig]);
@@ -128,8 +123,13 @@ export const ConnectionSection = (): React.JSX.Element => {
 
   // Filter config hosts based on input
   const filteredHosts = useMemo(() => {
-    if (!host.trim()) return sshConfigHosts;
-    const lower = host.toLowerCase();
+    const lower = host.trim().toLowerCase();
+    if (!lower) return sshConfigHosts;
+    // If the input exactly matches a known alias, the user either pre-filled
+    // it or just selected from the dropdown — show the full list so they can
+    // see other options at a glance instead of being narrowed to a single row.
+    const exactMatch = sshConfigHosts.some((e) => e.alias.toLowerCase() === lower);
+    if (exactMatch) return sshConfigHosts;
     return sshConfigHosts.filter(
       (entry) =>
         entry.alias.toLowerCase().includes(lower) || entry.hostName?.toLowerCase().includes(lower)
@@ -142,7 +142,7 @@ export const ConnectionSection = (): React.JSX.Element => {
     setHost(entry.alias);
     if (entry.port) setPort(String(entry.port));
     if (entry.user) setUsername(entry.user);
-    setAuthMethod('auto');
+    setAuthMethod('sshConfig');
     setShowDropdown(false);
     setTestResult(null);
     clearProfileSelection();
@@ -152,8 +152,7 @@ export const ConnectionSection = (): React.JSX.Element => {
     setHost(profile.host);
     setPort(String(profile.port));
     setUsername(profile.username);
-    setAuthMethod(profile.authMethod);
-    if (profile.privateKeyPath) setPrivateKeyPath(profile.privateKeyPath);
+    setAuthMethod(normalizeSshAuthMethod(profile.authMethod));
     setPassword('');
     setTestResult(null);
     setSelectedProfileId(profile.id);
@@ -165,7 +164,6 @@ export const ConnectionSection = (): React.JSX.Element => {
     username,
     authMethod,
     password: authMethod === 'password' ? password : undefined,
-    privateKeyPath: authMethod === 'privateKey' ? privateKeyPath : undefined,
   });
 
   const handleTest = async (): Promise<void> => {
@@ -235,7 +233,9 @@ export const ConnectionSection = (): React.JSX.Element => {
 
       {connectionError && (
         <div className="rounded-md border border-red-500/20 bg-red-500/10 px-4 py-3">
-          <p className="text-sm text-red-400">{connectionError}</p>
+          <pre className="whitespace-pre-wrap break-words font-sans text-sm text-red-400">
+            {connectionError}
+          </pre>
         </div>
       )}
 
@@ -414,25 +414,13 @@ export const ConnectionSection = (): React.JSX.Element => {
             />
           </div>
 
-          {authMethod === 'privateKey' && (
-            <div>
-              <label
-                htmlFor="ssh-private-key-path"
-                className="mb-1 block text-xs"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                Private Key Path
-              </label>
-              <input
-                id="ssh-private-key-path"
-                type="text"
-                value={privateKeyPath}
-                onChange={(e) => setPrivateKeyPath(e.target.value)}
-                placeholder="~/.ssh/id_rsa"
-                className={inputClass}
-                style={inputStyle}
-              />
-            </div>
+          {authMethod === 'sshConfig' && (
+            <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              Uses your <code>~/.ssh/config</code> exactly like <code>ssh {host || '<host>'}</code>{' '}
+              from a terminal (IdentityFile, IdentityAgent, agent forwarding all honored). Add an{' '}
+              <code>IdentityFile</code> to the host&apos;s config block, or run <code>ssh-add</code>
+              , if connection fails.
+            </p>
           )}
 
           {authMethod === 'password' && (

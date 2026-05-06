@@ -1,11 +1,16 @@
 /**
  * SshConfigParser - Parses ~/.ssh/config to resolve host aliases.
  *
- * Responsibilities:
- * - Parse SSH config with Include directive support
- * - Return all defined Host aliases (excluding wildcards)
- * - Resolve alias to HostName, Port, User, IdentityFile
- * - Gracefully handle missing/unreadable files
+ * Two responsibilities:
+ * - `getHosts()`: enumerate every Host alias for the dropdown autocomplete.
+ *   Uses a line-based scanner because the `ssh-config` library was silently
+ *   dropping hosts in some configurations (mixed indentation, comment-heavy
+ *   sections, Include directives). For the dropdown we just need the names —
+ *   not full config resolution — so a forgiving parser is the right tool.
+ * - `resolveHost()`: full per-alias resolution. Uses the `ssh-config` library
+ *   which understands `Match`, multi-alias Host lines, and config inheritance.
+ *
+ * Both methods follow `Include` directives, expanding paths and globs.
  */
 
 import { createLogger } from '@shared/utils/logger';
@@ -27,31 +32,17 @@ export class SshConfigParser {
 
   /**
    * Returns all defined Host aliases (excluding `*` wildcards and patterns).
+   *
+   * Uses a forgiving line-based scan instead of the `ssh-config` library so
+   * that an unparseable block doesn't take out the rest of the config —
+   * users have lots of weird stuff in their ssh_config (gcloud-generated
+   * sections, OrbStack Includes, comment blocks).
    */
   async getHosts(): Promise<SshConfigHostEntry[]> {
     try {
-      const config = await this.parseConfig();
-      if (!config) return [];
-
-      const entries: SshConfigHostEntry[] = [];
-
-      for (const section of config) {
-        if (section.type !== SSHConfig.DIRECTIVE) continue;
-        if (section.param !== 'Host') continue;
-
-        const hostValue = section.value;
-        if (typeof hostValue !== 'string') continue;
-
-        // Skip wildcard-only entries and patterns with * or ?
-        const aliases = hostValue.split(/\s+/).filter((h) => !h.includes('*') && !h.includes('?'));
-
-        for (const alias of aliases) {
-          const resolved = this.resolveFromConfig(config, alias);
-          entries.push(resolved);
-        }
-      }
-
-      return entries;
+      const content = await this.readExpandedConfig();
+      if (content === null) return [];
+      return parseHostListing(content);
     } catch (err) {
       logger.error('Failed to get SSH config hosts:', err);
       return [];
@@ -70,8 +61,12 @@ export class SshConfigParser {
       const resolved = this.resolveFromConfig(config, alias);
 
       // If nothing was resolved beyond the alias itself, check if host was actually defined
-      if (!resolved.hostName && !resolved.user && !resolved.port && !resolved.identityFiles?.length) {
-        // Check if there's an explicit Host entry for this alias
+      if (
+        !resolved.hostName &&
+        !resolved.user &&
+        !resolved.port &&
+        !resolved.identityFiles?.length
+      ) {
         const hasEntry = config.some(
           (section) =>
             section.type === SSHConfig.DIRECTIVE &&
@@ -102,9 +97,12 @@ export class SshConfigParser {
     const user = Array.isArray(rawUser) ? rawUser[0] : (rawUser ?? undefined);
     const portStr = computed.Port;
     const port = portStr ? parseInt(String(portStr), 10) : undefined;
-    // Resolve identity file paths (expand ~ to home directory)
     const rawIdentityFile = computed.IdentityFile;
-    const rawFiles = Array.isArray(rawIdentityFile) ? rawIdentityFile : rawIdentityFile != null ? [rawIdentityFile] : [];
+    const rawFiles = Array.isArray(rawIdentityFile)
+      ? rawIdentityFile
+      : rawIdentityFile != null
+        ? [rawIdentityFile]
+        : [];
     const identityFiles = rawFiles
       .filter((f): f is string => typeof f === 'string')
       .map((f) => f.replace(/^~(?=$|\/|\\)/, os.homedir()));
@@ -119,18 +117,25 @@ export class SshConfigParser {
   }
 
   private async parseConfig(): Promise<SSHConfig | null> {
+    const content = await this.readExpandedConfig();
+    if (content === null) return null;
     try {
-      let content = await fs.promises.readFile(this.configPath, 'utf8');
-
-      // Process Include directives by expanding them inline
-      content = await this.expandIncludes(content);
-
       return SSHConfig.parse(content);
+    } catch (err) {
+      logger.error('Failed to parse SSH config:', err);
+      return null;
+    }
+  }
+
+  private async readExpandedConfig(): Promise<string | null> {
+    try {
+      const content = await fs.promises.readFile(this.configPath, 'utf8');
+      return await this.expandIncludes(content);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         logger.info('No SSH config file found at', this.configPath);
       } else {
-        logger.error('Failed to parse SSH config:', err);
+        logger.error('Failed to read SSH config:', err);
       }
       return null;
     }
@@ -156,7 +161,6 @@ export class SshConfigParser {
       const expandedPattern = pattern.replace(/^~/, os.homedir());
 
       try {
-        // Handle glob-like patterns by checking if the path contains wildcards
         if (expandedPattern.includes('*') || expandedPattern.includes('?')) {
           const dir = path.dirname(expandedPattern);
           const globPart = path.basename(expandedPattern);
@@ -193,4 +197,120 @@ export class SshConfigParser {
       return [];
     }
   }
+}
+
+// =============================================================================
+// Line-based host listing
+// =============================================================================
+
+/**
+ * Walks the (already include-expanded) config text and returns one entry per
+ * Host alias. Lenient: tolerates mixed indentation, `key=value` and `key value`
+ * forms, and comments. Unrecognized directives are silently skipped.
+ */
+function parseHostListing(content: string): SshConfigHostEntry[] {
+  const entries: SshConfigHostEntry[] = [];
+  // Multiple aliases on the same `Host a b c` line share the same body, so we
+  // accumulate to a list of "current entries" that all receive the next props.
+  let current: SshConfigHostEntry[] = [];
+
+  const flush = (): void => {
+    for (const entry of current) {
+      // Don't echo identity defaults that aren't explicitly set in the block.
+      if (entry.identityFiles?.length === 0) {
+        delete entry.identityFiles;
+      }
+      entries.push(entry);
+    }
+    current = [];
+  };
+
+  for (const rawLine of content.split('\n')) {
+    const line = stripComment(rawLine).trim();
+    if (!line) continue;
+
+    const kv = parseKeyValue(line);
+    if (!kv) continue;
+
+    const key = kv.key.toLowerCase();
+    const value = kv.value;
+
+    if (key === 'host') {
+      flush();
+      const aliases = value.split(/\s+/).filter((a) => a && !a.includes('*') && !a.includes('?'));
+      current = aliases.map((alias) => ({ alias }));
+      continue;
+    }
+
+    if (current.length === 0) continue;
+
+    for (const entry of current) {
+      applyDirective(entry, key, value);
+    }
+  }
+
+  flush();
+  return entries;
+}
+
+/* eslint-disable no-param-reassign --
+   `entry` is the in-progress builder for a Host block. Imperative mutation
+   is the natural shape for a line-by-line parser; the alternative (returning
+   a new object every line) would just churn allocations for no readability
+   gain. */
+function applyDirective(entry: SshConfigHostEntry, key: string, value: string): void {
+  switch (key) {
+    case 'hostname':
+      if (value !== entry.alias) entry.hostName = value;
+      break;
+    case 'user':
+      entry.user = value;
+      break;
+    case 'port': {
+      const port = parseInt(value, 10);
+      if (!Number.isNaN(port) && port !== 22) entry.port = port;
+      break;
+    }
+    case 'identityfile': {
+      const expanded = value.replace(/^~(?=$|\/|\\)/, os.homedir());
+      if (!entry.identityFiles) entry.identityFiles = [];
+      entry.identityFiles.push(expanded);
+      break;
+    }
+    default:
+      // Unrecognized directives don't appear in the dropdown; ignore.
+      break;
+  }
+}
+/* eslint-enable no-param-reassign -- end builder mutation block */
+
+function stripComment(line: string): string {
+  const idx = line.indexOf('#');
+  return idx === -1 ? line : line.slice(0, idx);
+}
+
+function parseKeyValue(line: string): { key: string; value: string } | null {
+  // Both `Key Value ...` and `Key=Value ...` are valid in OpenSSH config.
+  // Avoid regex to keep this linear-time on long lines.
+  const eqIdx = line.indexOf('=');
+  const wsIdx = findWhitespace(line);
+  if (eqIdx !== -1 && (wsIdx === -1 || eqIdx < wsIdx)) {
+    const key = line.slice(0, eqIdx).trim();
+    const value = line.slice(eqIdx + 1).trim();
+    if (!key) return null;
+    return { key, value };
+  }
+  if (wsIdx === -1) return null;
+  const key = line.slice(0, wsIdx);
+  const value = line.slice(wsIdx + 1).trim();
+  if (!key || !value) return null;
+  return { key, value };
+}
+
+function findWhitespace(s: string): number {
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s.charCodeAt(i);
+    if (c === 0x20 || c === 0x09) return i;
+  }
+  return -1;
 }

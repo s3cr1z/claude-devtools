@@ -114,7 +114,6 @@ export const createConnectionSlice: StateCreator<AppState, [], [], ConnectionSli
           port: config.port,
           username: config.username,
           authMethod: config.authMethod,
-          privateKeyPath: config.privateKeyPath,
         };
         set({ lastSshConfig: saved });
         void api.ssh.saveLastConnection(saved);
