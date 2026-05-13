@@ -82,6 +82,7 @@ The only workaround is `--verbose`, which dumps raw JSON, internal system prompt
 | Nothing about thinking | Extended thinking content, fully visible |
 | `--verbose` JSON dump | Structured, filterable, navigable interface — no noise |
 | Per-project Claude memory hidden in `~/.claude/projects/.../memory/` | `MEMORY.md` rendered as a clickable index of layers; open any layer in your editor |
+| Copy from terminal = wrapped lines, ANSI codes, broken Markdown | Real selectable text, one-click copy on every message and code block |
 
 **Zero configuration. No API keys. No wrappers. Works with every session you've ever run.**
 
@@ -117,6 +118,13 @@ brew install --cask claude-devtools
 <img width="100%" alt="context" src="https://github.com/user-attachments/assets/9ff4a5a7-bcf6-47fb-8ca5-d4021540804b" />
 
 Per-turn token attribution across 7 categories — **CLAUDE.md** (global, project, directory), **skills**, **@-mentioned files**, **tool I/O**, **thinking**, **team overhead**, **user text**. See exactly what's in the context window at any point.
+
+### [Terminal-Friendly Copy & Paste](https://claude-dev.tools/docs/copy-paste)
+
+<!-- TODO: replace with uploaded GitHub asset URL for copy-paste.mp4 -->
+<video src="https://github.com/user-attachments/assets/COPY-PASTE-VIDEO-ID" controls="controls" muted="muted" style="max-width: 100%;"></video>
+
+Copying Claude Code output from the terminal mangles it — selection wraps at the terminal width, ANSI color codes leak into the clipboard, and code blocks lose their Markdown formatting. claude-devtools renders every message, tool call, and output as **real selectable text** with **one-click copy** on every code block, plus full-session **export to Markdown / JSON / plain text**.
 
 ### [Project Memory](https://claude-dev.tools/docs/memory)
 
@@ -154,7 +162,7 @@ System notifications for `.env` access, tool errors, high token usage, and custo
 
 **Cmd+K** for cross-session search. Open multiple sessions side-by-side with drag-and-drop tabs.
 
-📖 **Full documentation:** [claude-dev.tools/docs](https://claude-dev.tools/docs) · **JSONL format reference:** [claude-dev.tools/docs/jsonl-format](https://claude-dev.tools/docs/jsonl-format) · **`claude --verbose` comparison:** [claude-dev.tools/docs/verbose-vs-devtools](https://claude-dev.tools/docs/verbose-vs-devtools)
+📖 **Full documentation:** [claude-dev.tools/docs](https://claude-dev.tools/docs) · **Copy from Claude Code:** [claude-dev.tools/docs/copy-paste](https://claude-dev.tools/docs/copy-paste) · **JSONL format reference:** [claude-dev.tools/docs/jsonl-format](https://claude-dev.tools/docs/jsonl-format) · **`claude --verbose` comparison:** [claude-dev.tools/docs/verbose-vs-devtools](https://claude-dev.tools/docs/verbose-vs-devtools)
 
 ---
 
