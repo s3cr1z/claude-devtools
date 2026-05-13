@@ -118,6 +118,25 @@ brew install --cask claude-devtools
 
 Per-turn token attribution across 7 categories — **CLAUDE.md** (global, project, directory), **skills**, **@-mentioned files**, **tool I/O**, **thinking**, **team overhead**, **user text**. See exactly what's in the context window at any point.
 
+### [Project Memory](https://claude-dev.tools/docs/memory)
+
+<img width="100%" alt="Project memory viewer with layer list, frontmatter card, and Open-in launcher" src="public/memory.png" />
+
+Claude Code stores per-project memory at `~/.claude/projects/<project>/memory/` — a `MEMORY.md` index plus one `.md` file per layer (working style, architecture notes, etc.). claude-devtools surfaces this as a sidebar entry that opens a dedicated pane: layer list on the left, full markdown rendering on the right with frontmatter shown as a metadata card, Obsidian-style `[[wikilinks]]` for cross-layer navigation, and an icon-driven "Open in…" launcher that hands any layer (or the whole memory folder) off to Finder/Explorer, Cursor, VS Code, Zed, Xcode, iTerm, Ghostty, Terminal — or copies the absolute path.
+
+### [Team & Subagent Trees](https://claude-dev.tools/docs/subagents)
+
+Isolated execution trees per agent with tool traces, token metrics, duration, and cost. Nested agents render recursively.
+
+### [Tool Call Inspector](https://claude-dev.tools/docs/tool-calls)
+
+Every tool call expanded with specialized viewers — syntax-highlighted Read calls, inline Edit diffs, Bash output, and full subagent trees.
+
+
+### [SSH Remote Sessions](https://claude-dev.tools/docs/ssh-remote)
+
+Inspect sessions on any remote machine over SSH. Reads `~/.ssh/config`, supports agent forwarding and key auth.
+
 ### [Compaction Visualization](https://claude-dev.tools/docs/compaction)
 
 <video src="https://github.com/user-attachments/assets/25281f09-05ed-4f81-97bc-7b1754b08b06" controls="controls" muted="muted" style="max-width: 100%;"></video>
@@ -130,21 +149,6 @@ See the moment your context hits the limit. Visualizes how context fills, compre
 
 System notifications for `.env` access, tool errors, high token usage, and custom regex patterns on any field.
 
-### [Tool Call Inspector](https://claude-dev.tools/docs/tool-calls)
-
-Every tool call expanded with specialized viewers — syntax-highlighted Read calls, inline Edit diffs, Bash output, and full subagent trees.
-
-### [Project Memory](https://claude-dev.tools/docs/memory)
-
-Claude Code stores per-project memory at `~/.claude/projects/<project>/memory/` — a `MEMORY.md` index plus one `.md` file per layer (working style, architecture notes, etc.). claude-devtools surfaces this as a sidebar entry that opens a dedicated pane: layer list on the left, full markdown rendering and in-pane search on the right, and an icon-driven "Open in…" launcher that hands any layer off to Finder/Explorer, Cursor, VS Code, Zed, Xcode, iTerm, Ghostty, Terminal — or copies the absolute path.
-
-### [Team & Subagent Trees](https://claude-dev.tools/docs/subagents)
-
-Isolated execution trees per agent with tool traces, token metrics, duration, and cost. Nested agents render recursively.
-
-### [SSH Remote Sessions](https://claude-dev.tools/docs/ssh-remote)
-
-Inspect sessions on any remote machine over SSH. Reads `~/.ssh/config`, supports agent forwarding and key auth.
 
 ### Command Palette & Multi-Pane Layout
 

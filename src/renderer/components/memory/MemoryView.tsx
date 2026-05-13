@@ -2,23 +2,32 @@
  * MemoryView — full-pane view for a project's memory directory.
  *
  * Layout: master/detail.
- *   Left:  list of memory layers (MEMORY.md entries + Unlinked .md files)
- *   Right: rendered markdown of the selected layer + toolbar with search and
- *          "Open in..." launcher.
+ *   Left:  list of memory layers (MEMORY.md + entries + Unlinked .md files)
+ *   Right: rendered markdown of the selected layer, with Copy and "Open in…"
+ *          buttons in the toolbar.
+ *
+ * Supports Obsidian-style [[wikilinks]] for cross-layer navigation: a token
+ * like `[[snapshot-is-full-fetch-outcome]]` becomes a clickable link that
+ * navigates to the matching layer within this pane.
  *
  * Opens as its own tab via tabSlice — same UX class as session tabs.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
 import { markdownComponents } from '@renderer/components/chat/markdownComponents';
 import { useStore } from '@renderer/store';
-import { Search } from 'lucide-react';
+import { Check, Copy } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 import { useShallow } from 'zustand/react/shallow';
 
 import { OpenInMenu } from '../sidebar/memory/OpenInMenu';
+
+import { splitFrontmatter } from './frontmatter';
+import { FrontmatterCard } from './FrontmatterCard';
+
+import type { Components } from 'react-markdown';
 
 interface MemoryViewProps {
   projectId: string;
@@ -29,15 +38,72 @@ interface ListRow {
   title: string;
   hook: string;
   fileName: string;
-  isOrphan: boolean;
+  /** index | linked | orphan */
+  kind: 'index' | 'linked' | 'orphan';
 }
 
-function highlightSearch(content: string, query: string): string {
-  if (!query.trim()) return content;
-  // Simple safe escape so user input doesn't break markdown rendering.
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(escaped, 'gi');
-  return content.replace(re, (m) => `**${m}**`);
+const INDEX_FILE = 'MEMORY.md';
+const WIKILINK_PROTOCOL = 'memory:';
+
+/**
+ * Rewrite [[slug]] tokens into ordinary markdown links pointing at a custom
+ * `memory:` href. The renderer's anchor component handles navigation.
+ *
+ * Skips matches inside fenced code blocks and inline code spans.
+ */
+function preprocessWikilinks(content: string): string {
+  const segments: string[] = [];
+  let cursor = 0;
+  // Mask code fences and inline code by capturing them verbatim, then
+  // substituting wikilinks only in the surviving prose segments.
+  const codeRe = /(```[\s\S]*?```|`[^`\n]*`)/g;
+  let m: RegExpExecArray | null;
+  while ((m = codeRe.exec(content)) !== null) {
+    segments.push(transformProse(content.slice(cursor, m.index)));
+    segments.push(m[0]);
+    cursor = m.index + m[0].length;
+  }
+  segments.push(transformProse(content.slice(cursor)));
+  return segments.join('');
+}
+
+function transformProse(text: string): string {
+  return text.replace(/\[\[([^\]\n]+?)\]\]/g, (_match, raw: string) => {
+    const slug = raw.trim();
+    if (!slug) return _match;
+    return `[${slug}](${WIKILINK_PROTOCOL}${encodeURIComponent(slug)})`;
+  });
+}
+
+/**
+ * Resolve a wikilink slug against the list of available layers.
+ * Match priority: exact fileName → fileName without `.md` → entry title
+ * (case-insensitive) → slugified title.
+ */
+function resolveWikilink(rawSlug: string, rows: ListRow[]): string | null {
+  const slug = rawSlug.trim();
+  if (!slug) return null;
+  const lower = slug.toLowerCase();
+
+  const byExact = rows.find((r) => r.fileName === slug);
+  if (byExact) return byExact.fileName;
+
+  const withMd = `${slug}.md`;
+  const byWithMd = rows.find((r) => r.fileName === withMd);
+  if (byWithMd) return byWithMd.fileName;
+
+  const byTitleCi = rows.find((r) => r.title.toLowerCase() === lower);
+  if (byTitleCi) return byTitleCi.fileName;
+
+  const slugified = lower.replace(/\s+/g, '-');
+  const bySlugified = rows.find(
+    (r) =>
+      r.fileName.toLowerCase() === `${slugified}.md` ||
+      r.title.toLowerCase().replace(/\s+/g, '-') === slugified
+  );
+  if (bySlugified) return bySlugified.fileName;
+
+  return null;
 }
 
 export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element => {
@@ -54,7 +120,7 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
     );
 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const [copiedAt, setCopiedAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (hasMemory === undefined) void loadMemoryForProject(projectId);
@@ -62,21 +128,28 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
 
   const rows: ListRow[] = useMemo(() => {
     if (!index) return [];
+    const indexRow: ListRow = {
+      key: INDEX_FILE,
+      title: 'Index',
+      hook: 'MEMORY.md',
+      fileName: INDEX_FILE,
+      kind: 'index',
+    };
     const entryRows: ListRow[] = index.entries.map((e) => ({
       key: e.file,
       title: e.title,
       hook: e.hook,
       fileName: e.file,
-      isOrphan: false,
+      kind: 'linked' as const,
     }));
     const orphanRows: ListRow[] = index.orphanFiles.map((f) => ({
       key: f,
       title: f,
       hook: '',
       fileName: f,
-      isOrphan: true,
+      kind: 'orphan' as const,
     }));
-    return [...entryRows, ...orphanRows];
+    return [indexRow, ...entryRows, ...orphanRows];
   }, [index]);
 
   useEffect(() => {
@@ -100,10 +173,82 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
   }, [selectedFile, projectId, fileContents, expanded, toggleMemoryEntry]);
 
   const content = selectedFile ? fileContents[`${projectId}::${selectedFile}`] : undefined;
-  const rendered = useMemo(
-    () => (content !== undefined ? highlightSearch(content, query) : undefined),
-    [content, query]
+  const { frontmatter, body } = useMemo(
+    () => (content !== undefined ? splitFrontmatter(content) : { frontmatter: null, body: '' }),
+    [content]
   );
+  const rendered = useMemo(
+    () => (content !== undefined ? preprocessWikilinks(body) : undefined),
+    [content, body]
+  );
+
+  const handleWikilinkClick = useCallback(
+    (rawHref: string, e: React.MouseEvent<HTMLAnchorElement>): boolean => {
+      if (!rawHref.startsWith(WIKILINK_PROTOCOL)) return false;
+      const slug = decodeURIComponent(rawHref.slice(WIKILINK_PROTOCOL.length));
+      const target = resolveWikilink(slug, rows);
+      e.preventDefault();
+      if (target) {
+        setSelectedFile(target);
+      }
+      return true;
+    },
+    [rows]
+  );
+
+  // Local markdown components: override the anchor renderer so wikilinks
+  // navigate inside the pane instead of opening external URLs.
+  const components = useMemo<Components>(
+    () => ({
+      ...markdownComponents,
+      a: ({ href, children, ...rest }) => {
+        const isWikilink = typeof href === 'string' && href.startsWith(WIKILINK_PROTOCOL);
+        const unresolved =
+          isWikilink &&
+          resolveWikilink(decodeURIComponent(href.slice(WIKILINK_PROTOCOL.length)), rows) === null;
+        if (isWikilink) {
+          return (
+            <a
+              {...rest}
+              href={href}
+              onClick={(e): void => {
+                handleWikilinkClick(href, e);
+              }}
+              className="cursor-pointer underline decoration-dotted underline-offset-2"
+              style={{
+                color: unresolved ? 'var(--color-text-muted)' : 'var(--prose-link)',
+              }}
+              title={unresolved ? 'No matching memory layer' : undefined}
+            >
+              {children}
+            </a>
+          );
+        }
+        return (
+          <a {...rest} href={href}>
+            {children}
+          </a>
+        );
+      },
+    }),
+    [rows, handleWikilinkClick]
+  );
+
+  const handleCopy = useCallback(async (): Promise<void> => {
+    if (content === undefined) return;
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedAt(Date.now());
+    } catch {
+      // Best-effort: ignore clipboard errors.
+    }
+  }, [content]);
+
+  useEffect(() => {
+    if (copiedAt === null) return;
+    const timer = setTimeout(() => setCopiedAt(null), 1500);
+    return (): void => clearTimeout(timer);
+  }, [copiedAt]);
 
   if (!hasMemory) {
     return (
@@ -142,11 +287,18 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
                   backgroundColor: isActive ? 'var(--color-surface-raised)' : undefined,
                 }}
               >
-                <span className="text-xs font-medium text-text">{row.title}</span>
+                <span
+                  className="text-xs font-medium text-text"
+                  style={
+                    row.kind === 'index' ? { color: 'var(--color-text-secondary)' } : undefined
+                  }
+                >
+                  {row.title}
+                </span>
                 {row.hook && (
                   <span className="line-clamp-2 text-[11px] text-text-muted">{row.hook}</span>
                 )}
-                {row.isOrphan && (
+                {row.kind === 'orphan' && (
                   <span className="text-[10px] uppercase tracking-wider text-text-muted">
                     Unlinked
                   </span>
@@ -160,24 +312,38 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
       {/* Content viewer */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <div
-          className="flex items-center justify-between gap-2 border-b px-4 py-2"
+          className="flex items-center justify-end gap-2 border-b px-4 py-2"
           style={{ borderColor: 'var(--color-border)' }}
         >
-          <div className="relative flex flex-1 items-center">
-            <Search size={14} className="absolute left-2 text-text-muted" aria-hidden="true" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e): void => setQuery(e.target.value)}
-              placeholder="Search this layer…"
-              className="w-full rounded border bg-transparent py-1 pl-7 pr-2 text-xs text-text outline-none focus:ring-1"
-              style={{
-                borderColor: 'var(--color-border-emphasis)',
-              }}
-            />
-          </div>
           {selectedFile && (
-            <OpenInMenu projectId={projectId} fileName={selectedFile} variant="iconMenu" />
+            <>
+              <button
+                type="button"
+                aria-label={copiedAt ? 'Copied' : 'Copy content'}
+                onClick={(): void => {
+                  void handleCopy();
+                }}
+                disabled={content === undefined}
+                className="flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs text-text hover:bg-surface-raised disabled:opacity-40"
+                style={{
+                  backgroundColor: 'var(--color-surface-overlay)',
+                  borderColor: 'var(--color-border-emphasis)',
+                }}
+              >
+                {copiedAt ? (
+                  <>
+                    <Check size={14} className="text-text-secondary" aria-hidden="true" />
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} className="text-text-secondary" aria-hidden="true" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+              <OpenInMenu projectId={projectId} fileName={selectedFile} variant="iconMenu" />
+            </>
           )}
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -186,10 +352,13 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
           ) : rendered === undefined ? (
             <div className="text-text-muted">Loading…</div>
           ) : (
-            <div className="prose-sm max-w-3xl" style={{ color: 'var(--prose-body)' }}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {rendered}
-              </ReactMarkdown>
+            <div className="max-w-3xl">
+              {frontmatter && <FrontmatterCard frontmatter={frontmatter} />}
+              <div className="prose-sm" style={{ color: 'var(--prose-body)' }}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+                  {rendered}
+                </ReactMarkdown>
+              </div>
             </div>
           )}
         </div>
