@@ -68,10 +68,16 @@ function preprocessWikilinks(content: string): string {
   return segments.join('');
 }
 
+// Greedy negated character class — linear-time, never backtracks. The class
+// already excludes `]` and newlines so the engine cannot ambiguously consume
+// or release characters when matching the closing `]]`.
+// eslint-disable-next-line sonarjs/slow-regex -- bounded negated char class, no backtracking
+const WIKILINK_RE = /\[\[([^\]\n]+)\]\]/g;
+
 function transformProse(text: string): string {
-  return text.replace(/\[\[([^\]\n]+?)\]\]/g, (_match, raw: string) => {
+  return text.replace(WIKILINK_RE, (match, raw: string) => {
     const slug = raw.trim();
-    if (!slug) return _match;
+    if (!slug) return match;
     return `[${slug}](${WIKILINK_PROTOCOL}${encodeURIComponent(slug)})`;
   });
 }
@@ -153,27 +159,28 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
     return [indexRow, ...entryRows, ...orphanRows];
   }, [index]);
 
-  useEffect(() => {
-    if (rows.length === 0) {
-      setSelectedFile(null);
-      return;
+  // Compute the displayed file during render rather than via an effect+setState
+  // dance. The state cell only tracks the user's explicit choice; when it goes
+  // stale (rows change, project changes), we fall back to the first row.
+  const displayedFile = useMemo<string | null>(() => {
+    if (rows.length === 0) return null;
+    if (selectedFile && rows.some((r) => r.fileName === selectedFile)) {
+      return selectedFile;
     }
-    if (!selectedFile || !rows.some((r) => r.fileName === selectedFile)) {
-      setSelectedFile(rows[0].fileName);
-    }
+    return rows[0].fileName;
   }, [rows, selectedFile]);
 
-  // Load the selected layer's content on demand via the existing slice action.
+  // Load the displayed layer's content on demand via the existing slice action.
   useEffect(() => {
-    if (!selectedFile) return;
-    const key = `${projectId}::${selectedFile}`;
+    if (!displayedFile) return;
+    const key = `${projectId}::${displayedFile}`;
     if (fileContents[key] !== undefined) return;
-    if (!expanded.includes(selectedFile)) {
-      void toggleMemoryEntry(projectId, selectedFile);
+    if (!expanded.includes(displayedFile)) {
+      void toggleMemoryEntry(projectId, displayedFile);
     }
-  }, [selectedFile, projectId, fileContents, expanded, toggleMemoryEntry]);
+  }, [displayedFile, projectId, fileContents, expanded, toggleMemoryEntry]);
 
-  const content = selectedFile ? fileContents[`${projectId}::${selectedFile}`] : undefined;
+  const content = displayedFile ? fileContents[`${projectId}::${displayedFile}`] : undefined;
   const { frontmatter, body } = useMemo(
     () => (content !== undefined ? splitFrontmatter(content) : { frontmatter: null, body: '' }),
     [content]
@@ -311,7 +318,7 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
             <div className="px-3 py-2 text-xs text-text-muted">No memory layers yet</div>
           )}
           {rows.map((row) => {
-            const isActive = row.fileName === selectedFile;
+            const isActive = row.fileName === displayedFile;
             return (
               <button
                 key={row.key}
@@ -350,11 +357,11 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
           className="flex items-center justify-end gap-2 border-b px-4 py-2"
           style={{ borderColor: 'var(--color-border)' }}
         >
-          {selectedFile && (
+          {displayedFile && (
             <>
               <button
                 type="button"
-                aria-label={copiedAt ? 'Copied' : 'Copy content'}
+                aria-label={copiedAt === null ? 'Copy content' : 'Copied'}
                 onClick={(): void => {
                   void handleCopy();
                 }}
@@ -365,24 +372,24 @@ export const MemoryView = ({ projectId }: MemoryViewProps): React.JSX.Element =>
                   borderColor: 'var(--color-border-emphasis)',
                 }}
               >
-                {copiedAt ? (
-                  <>
-                    <Check size={14} className="text-text-secondary" aria-hidden="true" />
-                    <span>Copied</span>
-                  </>
-                ) : (
+                {copiedAt === null ? (
                   <>
                     <Copy size={14} className="text-text-secondary" aria-hidden="true" />
                     <span>Copy</span>
                   </>
+                ) : (
+                  <>
+                    <Check size={14} className="text-text-secondary" aria-hidden="true" />
+                    <span>Copied</span>
+                  </>
                 )}
               </button>
-              <OpenInMenu projectId={projectId} fileName={selectedFile} variant="iconMenu" />
+              <OpenInMenu projectId={projectId} fileName={displayedFile} variant="iconMenu" />
             </>
           )}
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {selectedFile === null ? (
+          {displayedFile === null ? (
             <div className="text-text-muted">Select a layer to view its content.</div>
           ) : rendered === undefined ? (
             <div className="text-text-muted">Loading…</div>

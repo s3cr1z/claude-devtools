@@ -257,9 +257,10 @@ const TARGETS: TargetSpec[] = [
     },
   },
   {
-    // TODO: verify the Antigravity bundle ID / CLI name once shipped.
-    // Hidden by default until detection succeeds, so we never advertise a
-    // broken menu item.
+    // Antigravity's CLI/bundle identifier isn't documented yet. Detection
+    // probes the obvious names (`antigravity` on PATH, `/Applications/
+    // Antigravity.app`) and the entry stays hidden from the menu unless one
+    // of those probes succeeds — so we never advertise a broken option.
     id: 'antigravity',
     label: 'Antigravity',
     iconName: 'antigravity',

@@ -137,7 +137,7 @@ export const OpenInMenu = ({
     };
     document.addEventListener('keydown', onKey);
     return (): void => document.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dispatch reads projectId/fileName via closure; intentionally rebound only when menu visibility or detected targets change
   }, [open, targets]);
 
   let trigger: React.ReactNode;

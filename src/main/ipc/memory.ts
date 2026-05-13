@@ -16,14 +16,14 @@ import { listAvailableOpeners, openIn } from '@main/utils/openInLauncher';
 import { createLogger } from '@shared/utils/logger';
 import { clipboard, type IpcMain, type IpcMainInvokeEvent } from 'electron';
 
-import {
-  MEMORY_COPY_PATH,
-  MEMORY_GET_INDEX,
-  MEMORY_HAS_MEMORY,
-  MEMORY_LIST_OPENERS,
-  MEMORY_OPEN_IN,
-  MEMORY_READ_FILE,
-} from '../../preload/constants/ipcChannels';
+// Channel constants (mirrored from preload/constants/ipcChannels.ts to respect
+// module boundaries — main process cannot import from preload).
+const MEMORY_HAS_MEMORY = 'memory:hasMemory';
+const MEMORY_GET_INDEX = 'memory:getIndex';
+const MEMORY_READ_FILE = 'memory:readFile';
+const MEMORY_LIST_OPENERS = 'memory:listAvailableOpeners';
+const MEMORY_OPEN_IN = 'memory:openIn';
+const MEMORY_COPY_PATH = 'memory:copyPath';
 
 import { validateProjectId } from './guards';
 

@@ -18,12 +18,15 @@ function fileCacheKey(projectId: string, fileName: string): string {
   return `${projectId}::${fileName}`;
 }
 
+// `Record<string, T | undefined>` (rather than plain `Record<string, T>`) so
+// "key not present" is statically representable and the slice consumers can
+// distinguish "not loaded yet" from a falsy loaded value.
 export interface MemorySlice {
-  hasMemoryByProjectId: Record<string, boolean>;
-  indexByProjectId: Record<string, MemoryIndex | null>;
-  expandedEntriesByProjectId: Record<string, string[]>;
-  fileContents: Record<string, string>;
-  memoryLoadingByProjectId: Record<string, boolean>;
+  hasMemoryByProjectId: Record<string, boolean | undefined>;
+  indexByProjectId: Record<string, MemoryIndex | null | undefined>;
+  expandedEntriesByProjectId: Record<string, string[] | undefined>;
+  fileContents: Record<string, string | undefined>;
+  memoryLoadingByProjectId: Record<string, boolean | undefined>;
   memoryError: string | null;
 
   loadMemoryForProject: (projectId: string) => Promise<void>;
@@ -135,7 +138,7 @@ export const createMemorySlice: StateCreator<AppState, [], [], MemorySlice> = (s
     if (!projectId) return;
     // Invalidate cached file contents for this project so re-expanding refetches.
     set((state) => {
-      const next: Record<string, string> = {};
+      const next: Record<string, string | undefined> = {};
       const prefix = `${projectId}::`;
       for (const [key, value] of Object.entries(state.fileContents)) {
         if (!key.startsWith(prefix)) next[key] = value;

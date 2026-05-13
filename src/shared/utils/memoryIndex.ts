@@ -25,7 +25,11 @@ export interface MemoryIndex {
   orphanFiles: string[];
 }
 
-const ENTRY_REGEX = /^\s*-\s*\[(.+?)\]\(([^)]+?\.md)\)\s*(?:[—–-]\s*(.*))?$/;
+// Bounded character classes throughout (no `.+?`) to guarantee linear-time
+// matching even on adversarial input. The negated classes can't include
+// their own terminator (`]` or `)`), so the engine never backtracks.
+// eslint-disable-next-line sonarjs/slow-regex -- bounded negated char classes, no backtracking
+const ENTRY_REGEX = /^\s*-\s*\[([^\]\n]+)\]\(([^)\n]+\.md)\)\s*(?:[—–-]\s*(.*))?$/;
 
 export function parseMemoryIndex(markdown: string, dirListing: readonly string[]): MemoryIndex {
   const entries: MemoryEntry[] = [];
@@ -49,7 +53,7 @@ export function parseMemoryIndex(markdown: string, dirListing: readonly string[]
   const orphanFiles = dirListing
     .filter((name) => name.toLowerCase().endsWith('.md'))
     .filter((name) => name !== 'MEMORY.md' && !seenFiles.has(name))
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
 
   return { rawMarkdown: markdown, entries, orphanFiles };
 }
