@@ -1,0 +1,194 @@
+=== CLAUDE-DEVTOOLS REPOSITORY STRUCTURE ===
+
+TOP-LEVEL FILES & FOLDERS:
+├── .claude/                    # Claude AI configuration & rules
+├── .github/                    # GitHub workflows & issue templates
+├── build/                      # Build output directory
+├── public/                     # Static assets
+├── resources/                  # App resources (icons, etc.)
+├── scripts/                    # Build & utility scripts
+├── src/                        # Main source code (see below)
+├── test/                       # Test files
+├── electron.vite.config.ts     # Electron + Vite build config
+├── tailwind.config.js          # Tailwind CSS config
+├── tsconfig.json               # TypeScript config
+├── package.json                # Dependencies & scripts
+├── pnpm-lock.yaml              # Lock file (uses pnpm)
+├── vite.standalone.config.ts   # Standalone Vite config
+├── vitest.config.ts            # Test runner config
+└── README.md, CHANGELOG.md, etc.
+
+=== SRC DIRECTORY STRUCTURE ===
+
+src/
+├── main/                       # Electron main process (backend)
+│   ├── index.ts               # Entry point for main process
+│   ├── constants/             # Constants (message tags, patterns)
+│   ├── http/                  # HTTP server endpoints
+│   │   ├── index.ts           # HTTP server setup
+│   │   ├── sessions.ts        # Session data endpoints
+│   │   ├── projects.ts        # Project management
+│   │   ├── search.ts          # Search functionality
+│   │   ├── subagents.ts       # Subagent tracking
+│   │   ├── memory.ts          # Memory/context tracking
+│   │   ├── notifications.ts   # Notification system
+│   │   ├── events.ts          # Event handling
+│   │   ├── ssh.ts             # SSH integration
+│   │   ├── updater.ts         # App updater
+│   │   ├── config.ts          # Configuration
+│   │   ├── utility.ts         # Utility endpoints
+│   │   └── validation.ts      # Input validation
+│   ├── ipc/                   # IPC (Inter-Process Communication)
+│   │   ├── handlers.ts        # Main IPC handlers
+│   │   ├── sessions.ts        # Session IPC
+│   │   ├── projects.ts        # Project IPC
+│   │   ├── search.ts          # Search IPC
+│   │   ├── subagents.ts       # Subagent IPC
+│   │   ├── memory.ts          # Memory IPC
+│   │   ├── notifications.ts   # Notification IPC
+│   │   ├── window.ts          # Window management IPC
+│   │   ├── config.ts          # Config IPC
+│   │   ├── context.ts         # Context IPC
+│   │   ├── guards.ts          # Type guards
+│   │   ├── configValidation.ts# Config validation
+│   │   ├── utility.ts         # Utility IPC
+│   │   ├── validation.ts      # Validation IPC
+│   │   ├── ssh.ts             # SSH IPC
+│   │   └── updater.ts         # Updater IPC
+│   └── services/              # Business logic services
+│       ├── analysis/          # Data analysis & processing
+│       │   ├── ChunkBuilder.ts
+│       │   ├── ChunkFactory.ts
+│       │   ├── ConversationGroupBuilder.ts
+│       │   ├── ProcessLinker.ts
+│       │   ├── SemanticStepExtractor.ts
+│       │   ├── SemanticStepGrouper.ts
+│       │   ├── SubagentDetailBuilder.ts
+│       │   ├── ToolExecutionBuilder.ts
+│       │   └── ... (more analysis services)
+│       ├── file/              # File system operations
+│       ├── project/           # Project management
+│       ├── session/           # Session management
+│       ├── search/            # Search implementation
+│       ├── notification/      # Notification handling
+│       ├── memory/            # Memory/context management
+│       ├── subagent/          # Subagent tracking
+│       ├── ssh/               # SSH operations
+│       ├── updater/           # Update management
+│       └── ... (more services)
+│
+├── preload/                   # Preload script (bridge between main & renderer)
+│   └── index.ts              # Preload entry point
+│
+├── renderer/                  # React frontend (UI)
+│   ├── index.tsx             # React entry point
+│   ├── App.tsx               # Root component
+│   ├── components/           # React components
+│   │   ├── SessionViewer/    # Main session viewer
+│   │   ├── ConversationView/ # Conversation display
+│   │   ├── ToolCallView/     # Tool call visualization
+│   │   ├── TokenUsage/       # Token tracking UI
+│   │   ├── SubagentView/     # Subagent display
+│   │   ├── SearchUI/         # Search interface
+│   │   ├── ProjectSelector/  # Project selection
+│   │   ├── Settings/         # Settings UI
+│   │   └── ... (more components)
+│   ├── pages/                # Page components
+│   ├── hooks/                # Custom React hooks
+│   ├── utils/                # Utility functions
+│   ├── styles/               # CSS/Tailwind styles
+│   └── types/                # TypeScript types
+│
+└── shared/                   # Shared types & utilities
+    ├── types/               # Shared TypeScript types
+    │   ├── session.ts       # Session types
+    │   ├── project.ts       # Project types
+    │   ├── message.ts       # Message types
+    │   ├── tool.ts          # Tool types
+    │   ├── subagent.ts      # Subagent types
+    │   └── ... (more types)
+    └── utils/               # Shared utilities
+
+=== KEY ENTRY POINTS ===
+
+1. MAIN PROCESS (Backend):
+   - src/main/index.ts
+   - Starts Electron app, HTTP server, IPC handlers
+   - Manages file system, sessions, projects
+
+2. RENDERER (Frontend):
+   - src/renderer/index.tsx
+   - React app entry point
+   - Communicates with main process via IPC
+
+3. PRELOAD SCRIPT:
+   - src/preload/index.ts
+   - Security bridge between main & renderer
+   - Exposes safe IPC methods to renderer
+
+4. BUILD CONFIG:
+   - electron.vite.config.ts
+   - Configures Electron + Vite build
+   - Defines main/preload/renderer entry points
+
+=== ARCHITECTURE PATTERN ===
+
+This is an Electron + React + TypeScript desktop app with:
+
+┌─────────────────────────────────────────┐
+│         RENDERER (React UI)             │
+│  - src/renderer/                        │
+│  - Components, pages, hooks             │
+└──────────────┬──────────────────────────┘
+               │ IPC (Inter-Process Communication)
+               │
+┌──────────────▼──────────────────────────┐
+│      PRELOAD (Security Bridge)          │
+│  - src/preload/index.ts                 │
+│  - Exposes safe IPC methods             │
+└──────────────┬──────────────────────────┘
+               │ IPC
+               │
+┌──────────────▼──────────────────────────┐
+│    MAIN PROCESS (Electron Backend)      │
+│  - src/main/index.ts                    │
+│  - HTTP server (port 7777)              │
+│  - IPC handlers                         │
+│  - File system access                   │
+│  - Session/project management           │
+│  - Services (analysis, search, etc.)    │
+└─────────────────────────────────────────┘
+
+=== TECHNOLOGY STACK ===
+
+Frontend:
+- React 18+
+- TypeScript
+- Tailwind CSS
+- Vite (build tool)
+
+Backend:
+- Electron
+- Node.js
+- Express (HTTP server)
+- TypeScript
+
+Testing:
+- Vitest
+- React Testing Library
+
+Build:
+- electron-vite
+- electron-builder
+- pnpm (package manager)
+
+=== MAIN FEATURES ===
+
+1. Session Viewer - Display Claude Code sessions
+2. Conversation Explorer - Browse conversations
+3. Tool Call Inspector - Analyze tool executions
+4. Token Usage Tracker - Monitor context window
+5. Subagent Viewer - Track subagent execution
+6. Search - Find sessions/conversations
+7. Project Management - Organize sessions
+8. Settings - Configure app behavior
