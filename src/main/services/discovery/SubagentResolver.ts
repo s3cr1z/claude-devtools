@@ -532,8 +532,8 @@ export class SubagentResolver {
       totalDuration += agent.durationMs;
       inputTokens += agent.metrics.inputTokens;
       outputTokens += agent.metrics.outputTokens;
-      cacheReadTokens += agent.metrics.cacheReadTokens;
-      cacheCreationTokens += agent.metrics.cacheCreationTokens;
+      cacheReadTokens += agent.metrics.cacheReadTokens ?? 0;
+      cacheCreationTokens += agent.metrics.cacheCreationTokens ?? 0;
       messageCount += agent.metrics.messageCount;
     }
 

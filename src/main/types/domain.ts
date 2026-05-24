@@ -8,7 +8,15 @@
  * - Token usage and metrics
  */
 
-import { type UsageMetadata } from './jsonl';
+import type { UsageMetadata } from './jsonl';
+import type { SystemContextFiles } from './providers';
+
+/**
+ * Alias kept for backward compatibility with existing call sites that consume
+ * Claude-specific CLAUDE.md file maps. New code should prefer
+ * {@link SystemContextFiles} directly.
+ */
+export type ClaudeMdFiles = SystemContextFiles;
 
 // =============================================================================
 // Application-Specific Type Aliases
@@ -126,9 +134,9 @@ export interface SessionMetrics {
   /** Output tokens */
   outputTokens: number;
   /** Cache read tokens */
-  cacheReadTokens: number;
+  cacheReadTokens?: number;
   /** Cache creation tokens */
-  cacheCreationTokens: number;
+  cacheCreationTokens?: number;
   /** Number of messages */
   messageCount: number;
   /** Estimated cost in USD */
