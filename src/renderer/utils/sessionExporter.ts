@@ -22,8 +22,8 @@ interface ExtractOptions {
 // Helpers (not exported)
 // =============================================================================
 
-function formatNumber(n: number): string {
-  return n.toLocaleString('en-US');
+function formatNumber(n?: number): string {
+  return (n ?? 0).toLocaleString('en-US');
 }
 
 function formatCost(cost?: number): string {

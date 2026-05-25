@@ -126,9 +126,9 @@ export interface SessionMetrics {
   /** Output tokens */
   outputTokens: number;
   /** Cache read tokens */
-  cacheReadTokens: number;
+  cacheReadTokens?: number;
   /** Cache creation tokens */
-  cacheCreationTokens: number;
+  cacheCreationTokens?: number;
   /** Number of messages */
   messageCount: number;
   /** Estimated cost in USD */
