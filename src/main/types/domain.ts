@@ -10,6 +10,8 @@
 
 import { type UsageMetadata } from './jsonl';
 
+import type { SystemContextFiles } from './providers';
+
 // =============================================================================
 // Application-Specific Type Aliases
 // =============================================================================
@@ -19,6 +21,13 @@ import { type UsageMetadata } from './jsonl';
  * Maps to UsageMetadata from the spec.
  */
 export type TokenUsage = UsageMetadata;
+
+/**
+ * Backwards-compatible alias for the provider-agnostic system-context file
+ * container. Older Claude-specific call sites can continue to import
+ * `ClaudeMdFiles` while new code can use {@link SystemContextFiles} directly.
+ */
+export type ClaudeMdFiles = SystemContextFiles;
 
 /**
  * Message type classification for parsed messages.
@@ -125,10 +134,10 @@ export interface SessionMetrics {
   inputTokens: number;
   /** Output tokens */
   outputTokens: number;
-  /** Cache read tokens */
-  cacheReadTokens: number;
-  /** Cache creation tokens */
-  cacheCreationTokens: number;
+  /** Cache read tokens (provider-specific; absent when the provider does not distinguish cache reads). */
+  cacheReadTokens?: number;
+  /** Cache creation tokens (provider-specific; absent when the provider does not distinguish cache writes). */
+  cacheCreationTokens?: number;
   /** Number of messages */
   messageCount: number;
   /** Estimated cost in USD */
