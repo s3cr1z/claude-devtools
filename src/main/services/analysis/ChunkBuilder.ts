@@ -333,8 +333,8 @@ export class ChunkBuilder {
       durationMs += chunk.durationMs;
       inputTokens += chunk.metrics.inputTokens;
       outputTokens += chunk.metrics.outputTokens;
-      cacheReadTokens += chunk.metrics.cacheReadTokens;
-      cacheCreationTokens += chunk.metrics.cacheCreationTokens;
+      cacheReadTokens += chunk.metrics.cacheReadTokens ?? 0;
+      cacheCreationTokens += chunk.metrics.cacheCreationTokens ?? 0;
       messageCount += chunk.metrics.messageCount;
     }
 
