@@ -8,8 +8,7 @@
  * - Token usage and metrics
  */
 
-import { type UsageMetadata } from './jsonl';
-
+import type { UsageMetadata } from './jsonl';
 import type { SystemContextFiles } from './providers';
 
 // =============================================================================
@@ -134,9 +133,9 @@ export interface SessionMetrics {
   inputTokens: number;
   /** Output tokens */
   outputTokens: number;
-  /** Cache read tokens (provider-specific; absent when the provider does not distinguish cache reads). */
+  /** Cache read tokens (provider-specific; absent when not reported). */
   cacheReadTokens?: number;
-  /** Cache creation tokens (provider-specific; absent when the provider does not distinguish cache writes). */
+  /** Cache creation tokens (provider-specific; absent when not reported). */
   cacheCreationTokens?: number;
   /** Number of messages */
   messageCount: number;

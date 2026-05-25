@@ -1,12 +1,10 @@
 /**
- * Agent registry — central catalog of agent runtime adapters.
+ * AgentRegistry — manages the set of AI agent providers available to the app.
  *
- * The registry owns a list of {@link IAgentProvider} instances and exposes a
- * minimal API for discovering which adapter should service a given workspace.
- * New providers can be added either at construction time (see the built-in
- * {@link ClaudeAdapter} / {@link AntigravityAdapter} registrations) or at
- * runtime via {@link registerProvider}, enabling extension without touching
- * call sites.
+ * The registry owns a list of {@link IAgentProvider} instances and is
+ * responsible for resolving which provider should handle a given workspace.
+ * The registry is the seam where additional providers (e.g. Antigravity) plug
+ * in without changing call sites.
  */
 
 import { AntigravityAdapter } from '../parsing/adapters/AntigravityAdapter';
@@ -19,26 +17,24 @@ export class AgentRegistry {
   private providers: IAgentProvider[] = [];
 
   constructor(projectScanner: ProjectScanner) {
+    // Claude Code first to preserve historical behaviour when multiple providers exist.
     this.registerProvider(new ClaudeAdapter(projectScanner));
     this.registerProvider(new AntigravityAdapter(projectScanner));
   }
 
-  /** Adds a provider to the registry. */
+  /** Register an additional provider with the registry. */
   registerProvider(provider: IAgentProvider): void {
     this.providers.push(provider);
   }
 
-  /** Returns all currently registered providers (registration order). */
+  /** Return every provider currently registered. */
   listProviders(): IAgentProvider[] {
-    return this.providers;
+    return [...this.providers];
   }
 
   /**
-   * Returns the first provider that reports a session for the given workspace,
-   * or `null` if no provider claims the workspace.
-   *
-   * Registration order acts as priority — {@link ClaudeAdapter} is registered
-   * first to preserve historical behaviour for Claude Code workspaces.
+   * Find the first provider that reports it can handle the given workspace.
+   * Returns null when no registered provider claims the workspace.
    */
   async getProviderForWorkspace(workspacePath: string): Promise<IAgentProvider | null> {
     for (const provider of this.providers) {

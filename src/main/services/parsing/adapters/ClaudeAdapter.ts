@@ -1,24 +1,25 @@
 /**
- * Claude Code adapter — wraps the existing Claude session/CLAUDE.md discovery
- * pipeline in the provider-agnostic {@link IAgentProvider} contract.
+ * ClaudeAdapter — implements IAgentProvider for Claude Code sessions.
  *
- * This adapter is intentionally thin: it delegates to the existing
- * `SessionParser`, `readAllClaudeMdFiles`, `ProjectScanner` and JSONL helpers
- * that already power Claude support. The goal is to introduce the adapter
- * surface without changing any Claude-specific behaviour.
- *
- * `parseSessionLog`, `extractMetadata` and `extractSemanticSteps` are
- * intentional placeholders for the moment: the production paths still flow
- * through {@link ProjectScanner}'s legacy mapping logic. Once that mapping is
- * consolidated into an adapter-friendly shape those methods will start
- * delegating to {@link SessionParser} and the helpers in `@main/utils/jsonl`.
+ * Wraps the existing Claude-specific services (SessionParser, ClaudeMdReader,
+ * ProjectScanner) so the rest of the application can interact with Claude
+ * sessions through the provider-agnostic IAgentProvider interface.
  */
 
+import { analyzeSessionFileMetadata } from '@main/utils/jsonl';
+
 import { readAllClaudeMdFiles } from '../ClaudeMdReader';
+import { SessionParser } from '../SessionParser';
 
 import type { ProjectScanner } from '@main/services/discovery/ProjectScanner';
 import type { Session } from '@main/types/domain';
 import type { IAgentProvider, SystemContextFiles } from '@main/types/providers';
+
+// Re-export the wrapped Claude services from this module so future iterations
+// can delegate to them without touching imports elsewhere. The Session-to-
+// ParsedSession mapping currently lives inside ProjectScanner and will be
+// migrated here in a follow-up.
+export { analyzeSessionFileMetadata, SessionParser };
 
 export class ClaudeAdapter implements IAgentProvider {
   readonly id = 'claude-code';
@@ -27,8 +28,8 @@ export class ClaudeAdapter implements IAgentProvider {
   constructor(private projectScanner: ProjectScanner) {}
 
   /**
-   * Detects whether a Claude Code projects directory exists on disk.
-   * Mirrors the legacy detection performed by `ProjectScanner.scan`.
+   * Detect whether Claude Code has any sessions for the given workspace.
+   * For now this simply checks that the Claude projects directory exists.
    */
   async detectSession(_projectPath: string): Promise<boolean> {
     const fsProvider = this.projectScanner.getFileSystemProvider();
@@ -37,38 +38,43 @@ export class ClaudeAdapter implements IAgentProvider {
   }
 
   /**
-   * Placeholder: the production path still goes through ProjectScanner's
-   * Session-to-ParsedSession mapping. Once that mapping is consolidated into
-   * an adapter-friendly shape this method will delegate to `SessionParser`.
+   * Parse a session log file into the application's Session model.
+   *
+   * The full Session-to-ParsedSession mapping currently lives inside
+   * {@link ProjectScanner}; until that logic is extracted we throw so callers
+   * don't silently end up with a partial object.
    */
   async parseSessionLog(_logFilePath: string): Promise<Session> {
     throw new Error('Delegated to ProjectScanner mapping logic temporarily.');
   }
 
   /**
-   * Reads all CLAUDE.md locations for a workspace and returns them in the
-   * provider-agnostic {@link SystemContextFiles} shape.
+   * Read Claude's system context files (CLAUDE.md and friends) for the
+   * provided workspace path.
    */
   async parseSystemContext(workspacePath: string): Promise<SystemContextFiles> {
-    const result = await readAllClaudeMdFiles(
-      workspacePath,
-      this.projectScanner.getFileSystemProvider()
-    );
+    const fsProvider = this.projectScanner.getFileSystemProvider();
+    const result = await readAllClaudeMdFiles(workspacePath, fsProvider);
     return { files: result.files };
   }
 
   /**
-   * Placeholder for Claude-specific metadata extraction. Returning `null`
-   * preserves current behaviour while making the contract explicit.
+   * Extract Claude-specific metadata from a list of log lines.
+   * Placeholder — returns null until the corresponding logic is migrated
+   * out of the existing parsing pipeline.
    */
-  extractMetadata(_logLines: unknown[]): unknown {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- IAgentProvider contract uses `any` to stay provider-agnostic; per-provider log shapes differ.
+  extractMetadata(_logLines: any[]): any {
     return null;
   }
 
   /**
-   * Placeholder for Claude-specific semantic-step extraction.
+   * Extract semantic steps from a list of log lines.
+   * Placeholder — returns an empty array until the corresponding logic is
+   * migrated out of the existing semantic-step pipeline.
    */
-  extractSemanticSteps(_logLines: unknown[]): unknown[] {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- IAgentProvider contract uses `any` to stay provider-agnostic; per-provider log shapes differ.
+  extractSemanticSteps(_logLines: any[]): any[] {
     return [];
   }
 }
