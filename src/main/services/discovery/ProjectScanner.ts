@@ -45,6 +45,7 @@ import * as path from 'path';
 
 import { LocalFileSystemProvider } from '../infrastructure/LocalFileSystemProvider';
 
+import { AgentRegistry } from './AgentRegistry';
 import { ProjectPathResolver } from './ProjectPathResolver';
 import { SessionContentFilter } from './SessionContentFilter';
 import { SessionSearcher } from './SessionSearcher';
@@ -53,6 +54,7 @@ import { subprojectRegistry } from './SubprojectRegistry';
 import { WorktreeGrouper } from './WorktreeGrouper';
 
 import type { FileSystemProvider, FsDirent } from '../infrastructure/FileSystemProvider';
+import type { IAgentProvider } from '@main/types/providers';
 
 const logger = createLogger('Discovery:ProjectScanner');
 
@@ -85,6 +87,7 @@ export class ProjectScanner {
   private readonly subagentLocator: SubagentLocator;
   private readonly sessionSearcher: SessionSearcher;
   private readonly projectPathResolver: ProjectPathResolver;
+  private readonly agentRegistry: AgentRegistry;
 
   constructor(projectsDir?: string, todosDir?: string, fsProvider?: FileSystemProvider) {
     this.projectsDir = projectsDir ?? getProjectsBasePath();
@@ -97,6 +100,7 @@ export class ProjectScanner {
     this.subagentLocator = new SubagentLocator(this.projectsDir, this.fsProvider);
     this.sessionSearcher = new SessionSearcher(this.projectsDir, this.fsProvider);
     this.projectPathResolver = new ProjectPathResolver(this.projectsDir, this.fsProvider);
+    this.agentRegistry = new AgentRegistry(this);
   }
 
   // ===========================================================================
@@ -1055,6 +1059,22 @@ export class ProjectScanner {
    */
   getFileSystemProvider(): FileSystemProvider {
     return this.fsProvider;
+  }
+
+  /**
+   * Returns the agent registry that owns provider adapters.
+   */
+  getAgentRegistry(): AgentRegistry {
+    return this.agentRegistry;
+  }
+
+  /**
+   * Resolves the workspace path for the given project and returns the first
+   * registered provider that claims it (or `null` when none does).
+   */
+  async getProvider(projectId: string): Promise<IAgentProvider | null> {
+    const workspacePath = await this.projectPathResolver.resolveProjectPath(projectId);
+    return this.agentRegistry.getProviderForWorkspace(workspacePath);
   }
 
   /**

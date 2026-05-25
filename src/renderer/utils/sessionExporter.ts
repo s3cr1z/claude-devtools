@@ -315,8 +315,8 @@ export function exportAsPlainText(detail: SessionDetail): string {
   lines.push(`Total Tokens:   ${formatNumber(metrics.totalTokens)}`);
   lines.push(`Input Tokens:   ${formatNumber(metrics.inputTokens)}`);
   lines.push(`Output Tokens:  ${formatNumber(metrics.outputTokens)}`);
-  lines.push(`Cache Read:     ${formatNumber(metrics.cacheReadTokens)}`);
-  lines.push(`Cache Created:  ${formatNumber(metrics.cacheCreationTokens)}`);
+  lines.push(`Cache Read:     ${formatNumber(metrics.cacheReadTokens ?? 0)}`);
+  lines.push(`Cache Created:  ${formatNumber(metrics.cacheCreationTokens ?? 0)}`);
   lines.push(`Messages:       ${formatNumber(metrics.messageCount)}`);
   lines.push(`Cost:           ${formatCost(metrics.costUsd)}`);
   lines.push('');
@@ -370,8 +370,8 @@ export function exportAsMarkdown(detail: SessionDetail): string {
   lines.push(`| Total Tokens | ${formatNumber(metrics.totalTokens)} |`);
   lines.push(`| Input Tokens | ${formatNumber(metrics.inputTokens)} |`);
   lines.push(`| Output Tokens | ${formatNumber(metrics.outputTokens)} |`);
-  lines.push(`| Cache Read | ${formatNumber(metrics.cacheReadTokens)} |`);
-  lines.push(`| Cache Created | ${formatNumber(metrics.cacheCreationTokens)} |`);
+  lines.push(`| Cache Read | ${formatNumber(metrics.cacheReadTokens ?? 0)} |`);
+  lines.push(`| Cache Created | ${formatNumber(metrics.cacheCreationTokens ?? 0)} |`);
   lines.push(`| Messages | ${formatNumber(metrics.messageCount)} |`);
   lines.push(`| Cost | ${formatCost(metrics.costUsd)} |`);
   lines.push('');
