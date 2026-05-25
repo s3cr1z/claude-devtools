@@ -28,9 +28,9 @@ interface TokenUsageDisplayProps {
   /** Output tokens count */
   outputTokens: number;
   /** Cache read tokens count */
-  cacheReadTokens: number;
+  cacheReadTokens?: number;
   /** Cache creation/write tokens count */
-  cacheCreationTokens: number;
+  cacheCreationTokens?: number;
   /** Thinking tokens (extended thinking content) - estimated from content */
   thinkingTokens?: number;
   /** Text output tokens (Claude's text responses) - estimated from content */
@@ -247,7 +247,9 @@ export const TokenUsageDisplay = ({
   phaseNumber,
   totalPhases,
 }: Readonly<TokenUsageDisplayProps>): React.JSX.Element => {
-  const totalTokens = inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens;
+  const safeCacheReadTokens = cacheReadTokens ?? 0;
+  const safeCacheCreationTokens = cacheCreationTokens ?? 0;
+  const totalTokens = inputTokens + safeCacheReadTokens + safeCacheCreationTokens + outputTokens;
   const formattedTotal = formatTokens(totalTokens);
 
   // Size-based classes
@@ -459,7 +461,7 @@ export const TokenUsageDisplay = ({
                     className="font-medium tabular-nums"
                     style={{ color: COLOR_TEXT_SECONDARY }}
                   >
-                    {formatTokensDetailed(cacheReadTokens)}
+                    {formatTokensDetailed(safeCacheReadTokens)}
                   </span>
                 </div>
 
@@ -470,7 +472,7 @@ export const TokenUsageDisplay = ({
                     className="font-medium tabular-nums"
                     style={{ color: COLOR_TEXT_SECONDARY }}
                   >
-                    {formatTokensDetailed(cacheCreationTokens)}
+                    {formatTokensDetailed(safeCacheCreationTokens)}
                   </span>
                 </div>
 

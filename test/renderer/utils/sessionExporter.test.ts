@@ -231,6 +231,22 @@ describe('exportAsPlainText', () => {
     expect(result).toContain('$0.05');
   });
 
+
+  it('handles missing cache metrics without NaN in plaintext and markdown', () => {
+    const detail = makeSessionDetail({
+      metrics: makeMetrics({ cacheReadTokens: undefined, cacheCreationTokens: undefined }),
+    });
+
+    const plain = exportAsPlainText(detail as any);
+    const md = exportAsMarkdown(detail as any);
+
+    expect(plain).toContain('Cache Read:     0');
+    expect(plain).toContain('Cache Created:  0');
+    expect(plain).not.toContain('NaN');
+    expect(md).toContain('| Cache Read | 0 |');
+    expect(md).toContain('| Cache Created | 0 |');
+    expect(md).not.toContain('NaN');
+  });
   it('renders user chunks with USER: label', () => {
     const detail = makeSessionDetail();
     const result = exportAsPlainText(detail as any);

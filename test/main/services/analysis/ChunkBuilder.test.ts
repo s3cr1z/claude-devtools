@@ -446,4 +446,32 @@ describe('ChunkBuilder', () => {
       expect(waterfall.items.some((item) => item.type === 'subagent')).toBe(true);
     });
   });
+
+  describe('metrics aggregation', () => {
+    it('defaults missing cache metrics to 0 when aggregating chunk totals', () => {
+      const totals = builder.getTotalChunkMetrics([
+        {
+          id: 'c1',
+          chunkType: 'user',
+          startTime: new Date('2025-01-01T00:00:00Z'),
+          endTime: new Date('2025-01-01T00:00:00Z'),
+          durationMs: 0,
+          userMessage: createMessage({ type: 'user', content: 'u' }),
+          metrics: {
+            durationMs: 0,
+            totalTokens: 10,
+            inputTokens: 10,
+            outputTokens: 0,
+            cacheReadTokens: undefined,
+            cacheCreationTokens: undefined,
+            messageCount: 1,
+          },
+        } as any,
+      ]);
+
+      expect(totals.cacheReadTokens).toBe(0);
+      expect(totals.cacheCreationTokens).toBe(0);
+      expect(totals.inputTokens).toBe(10);
+    });
+  });
 });
