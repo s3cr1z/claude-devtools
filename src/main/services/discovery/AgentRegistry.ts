@@ -8,6 +8,7 @@
  * plug in.
  */
 
+import { AntigravityAdapter } from '../parsing/adapters/AntigravityAdapter';
 import { ClaudeAdapter } from '../parsing/adapters/ClaudeAdapter';
 
 import type { ProjectScanner } from './ProjectScanner';
@@ -19,6 +20,7 @@ export class AgentRegistry {
   constructor(projectScanner: ProjectScanner) {
     // Claude Code is registered by default so existing behaviour is unchanged.
     this.registerProvider(new ClaudeAdapter(projectScanner));
+    this.registerProvider(new AntigravityAdapter(projectScanner));
   }
 
   /** Register an additional provider with the registry. */
