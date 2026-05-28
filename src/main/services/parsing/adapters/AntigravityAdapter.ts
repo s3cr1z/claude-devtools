@@ -34,7 +34,7 @@ type GeminiRole = 'user' | 'assistant' | 'system';
 interface ParsedGeminiMessage {
   role: GeminiRole;
   content: string;
-  timestamp: Date;
+  timestamp: Date | null;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   isToolResult?: boolean;
@@ -85,8 +85,9 @@ export class AntigravityAdapter implements IAgentProvider {
   /**
    * Parse an Antigravity session log file into the application's Session model.
    *
-   * Reads the file via the configured FileSystemProvider, attempts to parse it
-   * as JSONL first and falls back to a JSON array if that fails. Parsing errors
+   * Reads the file via the configured FileSystemProvider. If the file appears
+   * to be a JSON array (starts with `[`) that shape is tried first; otherwise
+   * the content is treated as JSONL (one JSON object per line). Parsing errors
    * for individual entries are swallowed so a single malformed line cannot
    * prevent the rest of the session from being surfaced.
    */
@@ -126,7 +127,13 @@ export class AntigravityAdapter implements IAgentProvider {
       );
     }
 
-    const projectPath = path.dirname(logFilePath);
+    // Antigravity logs live under `~/.gemini/antigravity-ide/conversations/`,
+    // so `path.dirname(logFilePath)` typically points at that shared storage
+    // directory rather than the user's workspace. Probe the parsed entries for
+    // an embedded workspace path first and fall back to the log directory only
+    // when nothing better is available.
+    const probedWorkspace = this.probeWorkspacePath(rawContent);
+    const projectPath = probedWorkspace ?? path.dirname(logFilePath);
     const projectId = this.deriveProjectId(projectPath);
     const id = this.deriveSessionId(logFilePath);
 
@@ -135,14 +142,18 @@ export class AntigravityAdapter implements IAgentProvider {
       ? firstUserMessage.content.slice(0, MAX_FIRST_MESSAGE_LENGTH)
       : undefined;
 
-    const firstTimestamp = parsed.length > 0 ? parsed[0].timestamp : undefined;
-    const lastTimestamp = parsed.length > 0 ? parsed[parsed.length - 1].timestamp : undefined;
+    const firstTimestamp = parsed.find((m) => m.timestamp !== null)?.timestamp ?? null;
+    const lastTimestamp = [...parsed].reverse().find((m) => m.timestamp !== null)?.timestamp ?? null;
 
-    const createdAt = firstTimestamp?.getTime() ?? birthtimeMs ?? Date.now();
-    const updatedAt = lastTimestamp?.getTime() ?? mtimeMs;
+    const createdAt = Math.floor(
+      firstTimestamp?.getTime() ?? birthtimeMs ?? Date.now(),
+    );
+    const updatedAtRaw = lastTimestamp?.getTime() ?? mtimeMs;
+    const updatedAt = updatedAtRaw !== undefined ? Math.floor(updatedAtRaw) : undefined;
 
-    const messageTimestamp = firstUserMessage
-      ? firstUserMessage.timestamp.toISOString()
+    const firstUserTimestamp = firstUserMessage?.timestamp ?? null;
+    const messageTimestamp = firstUserTimestamp
+      ? firstUserTimestamp.toISOString()
       : firstTimestamp?.toISOString();
 
     return {
@@ -218,7 +229,7 @@ export class AntigravityAdapter implements IAgentProvider {
     let totalOverride: number | undefined;
 
     for (const line of logLines) {
-      const entry = this.coerceEntry(line);
+      const entry = this.normaliseEntry(line);
       if (!entry) continue;
 
       const usage = this.getUsageMetadata(entry);
@@ -253,10 +264,10 @@ export class AntigravityAdapter implements IAgentProvider {
 
     const steps: AntigravitySemanticStep[] = [];
     for (const line of logLines) {
-      const entry = this.coerceEntry(line);
+      const entry = this.normaliseEntry(line);
       if (!entry) continue;
 
-      const timestamp = this.extractGeminiTimestamp(entry);
+      const timestamp = this.extractGeminiTimestamp(entry) ?? new Date();
       const parts = this.getParts(entry);
 
       for (const part of parts) {
@@ -341,12 +352,14 @@ export class AntigravityAdapter implements IAgentProvider {
 
   /**
    * Extract a timestamp from a Gemini log entry, trying a handful of common
-   * field names (`createTime`, `timestamp`, `time`, `createdAt`). Falls back
-   * to "now" so the caller always receives a valid Date.
+   * field names (`createTime`, `timestamp`, `time`, `createdAt`). Returns
+   * `null` when no recognised timestamp field is present so callers can apply
+   * their own fallback (e.g. filesystem stat times) rather than getting a
+   * misleading "now" value silently substituted.
    */
-  extractGeminiTimestamp(entry: unknown): Date {
+  extractGeminiTimestamp(entry: unknown): Date | null {
     const record = this.coerceEntry(entry);
-    if (!record) return new Date();
+    if (!record) return null;
 
     const candidates = [
       record.createTime,
@@ -362,7 +375,7 @@ export class AntigravityAdapter implements IAgentProvider {
       const parsed = this.toDate(candidate);
       if (parsed) return parsed;
     }
-    return new Date();
+    return null;
   }
 
   /**
@@ -377,6 +390,22 @@ export class AntigravityAdapter implements IAgentProvider {
       ?? this.toStringValue(record.text)
       ?? this.toStringValue(record.message);
     if (directContent) return directContent;
+
+    // `record.message` / `record.content` may also be nested objects (e.g.
+    // `{ message: { content: "...", text: "..." } }` or the Gemini candidate
+    // shape `{ content: { role, parts } }`). Probe those before falling through
+    // to `parts[].text` aggregation so we don't lose the message body.
+    const nestedSources = [
+      this.coerceEntry(record.message),
+      this.coerceEntry(record.content),
+    ];
+    for (const nested of nestedSources) {
+      if (!nested) continue;
+      const nestedDirect = this.toStringValue(nested.content)
+        ?? this.toStringValue(nested.text)
+        ?? this.toStringValue(nested.message);
+      if (nestedDirect) return nestedDirect;
+    }
 
     const parts = this.getParts(record);
     const fragments: string[] = [];
@@ -397,7 +426,9 @@ export class AntigravityAdapter implements IAgentProvider {
 
     const rawRole = this.toStringValue(record.role)
       ?? this.toStringValue(record.author)
-      ?? this.toStringValue((record.message as Record<string, unknown> | undefined)?.role);
+      ?? this.toStringValue(this.coerceEntry(record.message)?.role)
+      // Gemini candidate shape: `{ content: { role: "model", parts: [...] } }`.
+      ?? this.toStringValue(this.coerceEntry(record.content)?.role);
     if (rawRole === undefined && !record.parts && !record.content && !record.text) {
       return null;
     }
@@ -445,10 +476,11 @@ export class AntigravityAdapter implements IAgentProvider {
   }
 
   /**
-   * Split a raw log file into per-entry strings. JSONL is tried first; if the
-   * file appears to be a JSON array (single document) we fall back to that
-   * format and re-emit each element as a JSON string so {@link parseGeminiMessage}
-   * can process them uniformly.
+   * Split a raw log file into per-entry strings. If the file appears to be a
+   * JSON array (single document starting with `[`) that is tried first and each
+   * element is re-emitted as a JSON string; otherwise we fall back to JSONL
+   * (one JSON object per line) so {@link parseGeminiMessage} can process the
+   * results uniformly.
    */
   private splitIntoEntries(rawContent: string): string[] {
     if (!rawContent) return [];
@@ -477,13 +509,19 @@ export class AntigravityAdapter implements IAgentProvider {
   private detectOngoing(messages: ParsedGeminiMessage[]): boolean {
     if (messages.length === 0) return false;
     const last = messages[messages.length - 1];
-    // Treat a trailing user prompt or an empty assistant message as "ongoing"
-    // since the model has either not responded yet or hasn't finished emitting
-    // its turn. This intentionally mirrors the conservative heuristic used by
-    // the Claude pipeline for incomplete sessions.
+    // Treat the session as "ongoing" when:
+    //   - the last entry is a user prompt (the model hasn't replied yet);
+    //   - the last entry is an assistant turn that issued a tool call (the
+    //     tool result is still pending);
+    //   - the last entry is a tool result (mapped to `system` role here) and
+    //     the model hasn't produced a follow-up response yet;
+    //   - the last entry is an empty assistant message (turn hasn't finished
+    //     emitting any text or tool call).
     if (last.role === 'user') return true;
-    if (last.role === 'assistant' && last.content.trim().length === 0 && !last.toolName) {
-      return true;
+    if (last.role === 'system' && last.isToolResult) return true;
+    if (last.role === 'assistant') {
+      if (last.toolName && !last.isToolResult) return true;
+      if (last.content.trim().length === 0 && !last.toolName) return true;
     }
     return false;
   }
@@ -491,7 +529,64 @@ export class AntigravityAdapter implements IAgentProvider {
   private deriveSessionId(logFilePath: string): string {
     const base = path.basename(logFilePath);
     const withoutExt = base.replace(/\.[^.]+$/, '');
-    return withoutExt || randomUUID();
+    // `withoutExt` can be empty for dotfiles like `.log` (where the basename
+    // is purely an extension). Fall back to the raw basename before reaching
+    // for a UUID so the id still ties back to the file on disk.
+    if (withoutExt.length > 0) return withoutExt;
+    if (base.length > 0) return base;
+    return randomUUID();
+  }
+
+  /**
+   * Best-effort probe for a workspace/project path embedded in the raw log
+   * content. Antigravity logs live under a shared conversations directory, so
+   * the actual workspace must be recovered from per-entry metadata. We scan
+   * for the most common field names without committing to a single schema.
+   */
+  private probeWorkspacePath(rawContent: string): string | undefined {
+    if (!rawContent) return undefined;
+    const fields = [
+      'workspacePath',
+      'workspace_path',
+      'workspace',
+      'projectPath',
+      'project_path',
+      'cwd',
+      'rootPath',
+      'root_path',
+    ];
+    for (const field of fields) {
+      // Look for `"field": "..."` anywhere in the file. We intentionally do
+      // not JSON.parse the whole document here — it may be JSONL and this
+      // probe runs before per-entry parsing.
+      const pattern = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
+      const match = rawContent.match(pattern);
+      if (match && match[1]) {
+        try {
+          // Re-use JSON's string decoding so escape sequences round-trip.
+          const decoded = JSON.parse(`"${match[1]}"`) as string;
+          if (decoded.length > 0) return decoded;
+        } catch {
+          // Fall through to next candidate.
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private normaliseEntry(value: unknown): Record<string, unknown> | null {
+    const direct = this.coerceEntry(value);
+    if (direct) return direct;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+      try {
+        return this.coerceEntry(JSON.parse(trimmed));
+      } catch {
+        return null;
+      }
+    }
+    return null;
   }
 
   private deriveProjectId(projectPath: string): string {
