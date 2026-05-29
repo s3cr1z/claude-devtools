@@ -346,7 +346,12 @@ export class AntigravityAdapter implements IAgentProvider {
   mapGeminiRole(role: string): GeminiRole {
     const normalized = (role ?? '').toString().toLowerCase();
     if (normalized === 'model' || normalized === 'assistant') return 'assistant';
-    if (normalized === 'system' || normalized === 'tool') return 'system';
+    // `'function'` is the legacy Gemini/PaLM name for what modern Gemini calls
+    // a `'tool'` response — bucket both into the internal system role so they
+    // don't get mis-classified as user prompts.
+    if (normalized === 'system' || normalized === 'tool' || normalized === 'function') {
+      return 'system';
+    }
     return 'user';
   }
 
@@ -426,6 +431,11 @@ export class AntigravityAdapter implements IAgentProvider {
 
     const rawRole = this.toStringValue(record.role)
       ?? this.toStringValue(record.author)
+      // Antigravity transcripts use uppercase `source` values such as
+      // `"MODEL"`, `"USER"`, `"TOOL"` instead of a `role` field. Probe it so
+      // model turns aren't silently mis-classified as user prompts (which
+      // would corrupt `firstMessage` and `detectOngoing`).
+      ?? this.toStringValue(record.source)
       ?? this.toStringValue(this.coerceEntry(record.message)?.role)
       // Gemini candidate shape: `{ content: { role: "model", parts: [...] } }`.
       ?? this.toStringValue(this.coerceEntry(record.content)?.role);
@@ -529,6 +539,49 @@ export class AntigravityAdapter implements IAgentProvider {
   private deriveSessionId(logFilePath: string): string {
     const base = path.basename(logFilePath);
     const withoutExt = base.replace(/\.[^.]+$/, '');
+
+    // Antigravity stores per-conversation transcripts under a layout like
+    // `brain/<conversation-id>/.system_generated/logs/transcript.jsonl`. In
+    // that case the bare basename (`transcript`) is identical across every
+    // conversation and would collide in any cache keyed by `Session.id`. When
+    // the filename is generic, walk up the directory tree and prefer the
+    // nearest non-generic parent segment (which is conventionally the
+    // conversation id) so ids stay unique.
+    const GENERIC_NAMES = new Set([
+      'transcript',
+      'session',
+      'log',
+      'logs',
+      'conversation',
+      'history',
+      'events',
+    ]);
+    if (withoutExt.length > 0 && !GENERIC_NAMES.has(withoutExt.toLowerCase())) {
+      return withoutExt;
+    }
+
+    const segments = path
+      .dirname(logFilePath)
+      .split(/[\\/]/)
+      .filter((segment) => segment.length > 0);
+    const GENERIC_DIRS = new Set([
+      '.system_generated',
+      'system_generated',
+      'logs',
+      'log',
+      'brain',
+      'conversations',
+      'sessions',
+      'transcripts',
+      'history',
+    ]);
+    for (let i = segments.length - 1; i >= 0; i--) {
+      const segment = segments[i];
+      if (!GENERIC_DIRS.has(segment.toLowerCase())) {
+        return `${segment}-${withoutExt || base}`;
+      }
+    }
+
     // `withoutExt` can be empty for dotfiles like `.log` (where the basename
     // is purely an extension). Fall back to the raw basename before reaching
     // for a UUID so the id still ties back to the file on disk.
@@ -560,7 +613,7 @@ export class AntigravityAdapter implements IAgentProvider {
       // not JSON.parse the whole document here — it may be JSONL and this
       // probe runs before per-entry parsing.
       const pattern = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
-      const match = rawContent.match(pattern);
+      const match = pattern.exec(rawContent);
       if (match && match[1]) {
         try {
           // Re-use JSON's string decoding so escape sequences round-trip.
@@ -664,9 +717,10 @@ export class AntigravityAdapter implements IAgentProvider {
       return JSON.stringify(value) ?? '';
     } catch {
       // Likely a cyclic structure or non-serialisable object — emit a stable
-      // placeholder rather than letting JavaScript's `[object Object]`
-      // default leak through (which the linter also flags).
-      return '';
+      // placeholder rather than silently returning '' (which makes tool
+      // results look empty downstream) or letting JavaScript's
+      // `[object Object]` default leak through.
+      return '[unserializable result]';
     }
   }
 }
