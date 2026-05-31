@@ -20,7 +20,13 @@
  * - Auto-scroll is suppressed during navigation
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import { isErrorPayload, isSearchPayload } from '@renderer/types/tabs';
 
@@ -64,15 +70,15 @@ interface UseTabNavigationControllerOptions {
   /** Tab ID for consuming navigation */
   tabId: string;
   /** Refs to AI group DOM elements */
-  aiGroupRefs: React.MutableRefObject<Map<string, HTMLElement>>;
+  aiGroupRefs: RefObject<Map<string, HTMLElement>>;
   /** Refs to individual chat item DOM elements */
-  chatItemRefs: React.MutableRefObject<Map<string, HTMLElement>>;
+  chatItemRefs: RefObject<Map<string, HTMLElement>>;
   /** Refs to individual tool item DOM elements */
-  toolItemRefs: React.MutableRefObject<Map<string, HTMLElement>>;
+  toolItemRefs: RefObject<Map<string, HTMLElement>>;
   /** Function to expand an AI group (per-tab state) */
   expandAIGroup: (groupId: string) => void;
   /** Ref to scroll container */
-  scrollContainerRef: React.RefObject<HTMLDivElement>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
   /** Height of sticky elements at top of scroll container */
   stickyOffset?: number;
   /** Optional helper to ensure a target group is mounted (e.g., virtualized lists) */

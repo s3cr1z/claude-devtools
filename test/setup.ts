@@ -14,6 +14,8 @@ vi.stubGlobal('process', {
   },
 });
 
+vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+
 let errorSpy: ReturnType<typeof vi.spyOn>;
 let warnSpy: ReturnType<typeof vi.spyOn>;
 
