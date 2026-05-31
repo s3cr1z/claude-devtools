@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { isNearBottom, useAutoScrollBottom } from '@renderer/hooks/useAutoScrollBottom';
 import { useTabNavigationController } from '@renderer/hooks/useTabNavigationController';

@@ -71,7 +71,7 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = React.memo(function
   // Combined ref callback - handles both internal ref and external registration
   const handleRef = (el: HTMLDivElement | null): void => {
     // Update internal ref
-    (elementRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    elementRef.current = el;
     // Call external registration if provided
     registerRef?.(el);
   };

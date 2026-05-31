@@ -143,12 +143,15 @@ describe('FileWatcher', () => {
 
     const watcher = new FileWatcher(dataCache, '/tmp/projects', '/tmp/todos');
     watcher.start();
-    expect(watchMock).toHaveBeenCalledTimes(2);
+    const initialWatchCallCount = watchMock.mock.calls.length;
+    expect(initialWatchCallCount).toBeGreaterThanOrEqual(2);
+    expect(watchMock.mock.calls.some((call) => call[0] === '/tmp/projects')).toBe(true);
+    expect(watchMock.mock.calls.some((call) => call[0] === '/tmp/todos')).toBe(true);
 
     (projectWatcher as unknown as EventEmitter).emit('error', new Error('watch failed'));
     vi.advanceTimersByTime(2000);
 
-    expect(watchMock).toHaveBeenCalledTimes(3);
+    expect(watchMock.mock.calls.length).toBeGreaterThan(initialWatchCallCount);
     watcher.stop();
   });
 

@@ -1,3 +1,5 @@
+import type { JSX } from 'react';
+
 /**
  * Loading skeleton for ChatHistory while conversation is loading.
  * Industrial shimmer with organic line widths — no generic pulse.

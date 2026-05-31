@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { type RefObject, useCallback, useEffect, useRef } from 'react';
 
 /**
  * Options for the auto-scroll hook.
@@ -40,7 +40,7 @@ interface UseAutoScrollBottomOptions {
    * ref instead of creating its own. Useful when the ref needs to be shared
    * with other hooks (e.g., navigation coordinator).
    */
-  externalRef?: React.RefObject<HTMLDivElement>;
+  externalRef?: RefObject<HTMLDivElement | null>;
 
   /**
    * When this value changes, reset isAtBottom state to true.
@@ -56,7 +56,7 @@ interface UseAutoScrollBottomReturn {
   /**
    * Ref to attach to the scroll container element.
    */
-  scrollContainerRef: React.RefObject<HTMLDivElement>;
+  scrollContainerRef: RefObject<HTMLDivElement | null>;
 
   /**
    * Get whether the user is currently at the bottom of the scroll container.

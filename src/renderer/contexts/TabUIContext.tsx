@@ -17,7 +17,7 @@
  * ```
  */
 
-import { createContext, type ReactNode } from 'react';
+import { createContext, type JSX, type ReactNode } from 'react';
 
 // =============================================================================
 // Context Definition

@@ -2,7 +2,7 @@
  * AddTriggerForm - Form to add a new custom trigger.
  */
 
-import { useCallback } from 'react';
+import { type SyntheticEvent, useCallback } from 'react';
 
 import { ChevronDown, ChevronUp, Loader2, Plus } from 'lucide-react';
 
@@ -110,8 +110,7 @@ export const AddTriggerForm = ({
     handleTestTrigger,
   ]);
 
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
+  const submitTrigger = useCallback(async (): Promise<void> => {
     if (!name.trim()) return;
     if (mode === 'content_match' && !validatePattern(matchPattern)) return;
 
@@ -120,6 +119,21 @@ export const AddTriggerForm = ({
     resetForm();
     clearPreview();
     setIsExpanded(false);
+  }, [
+    clearPreview,
+    handlers,
+    matchPattern,
+    mode,
+    name,
+    onAdd,
+    resetForm,
+    setIsExpanded,
+    validatePattern,
+  ]);
+
+  const handleSubmit = (e: SyntheticEvent<HTMLFormElement>): void => {
+    e.preventDefault();
+    void submitTrigger();
   };
 
   return (
