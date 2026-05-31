@@ -10,6 +10,7 @@
 
 import { AntigravityAdapter } from '../parsing/adapters/AntigravityAdapter';
 import { ClaudeAdapter } from '../parsing/adapters/ClaudeAdapter';
+import { OpenCodeAdapter } from '../parsing/adapters/OpenCodeAdapter';
 
 import type { ProjectScanner } from './ProjectScanner';
 import type { IAgentProvider } from '@main/types/providers';
@@ -18,9 +19,11 @@ export class AgentRegistry {
   private providers: IAgentProvider[] = [];
 
   constructor(projectScanner: ProjectScanner) {
-    // Claude Code is registered by default so existing behaviour is unchanged.
+    // Provider order only matters when two adapters claim the same workspace,
+    // so each adapter's detection must stay workspace-specific.
     this.registerProvider(new ClaudeAdapter(projectScanner));
     this.registerProvider(new AntigravityAdapter(projectScanner));
+    this.registerProvider(new OpenCodeAdapter(projectScanner));
   }
 
   /** Register an additional provider with the registry. */

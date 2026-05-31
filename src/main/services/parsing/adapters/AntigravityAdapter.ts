@@ -17,6 +17,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import type { ProjectScanner } from '@main/services/discovery/ProjectScanner';
+import type { FileSystemProvider } from '@main/services/infrastructure/FileSystemProvider';
 import type { Session } from '@main/types/domain';
 import type { IAgentProvider, SystemContextFiles } from '@main/types/providers';
 
@@ -69,9 +70,10 @@ export class AntigravityAdapter implements IAgentProvider {
 
   /**
    * Detect whether Google Antigravity has any sessions for the given workspace.
-   * Checks for the existence of the Antigravity conversations directory.
+   * Antigravity logs live in a shared conversations directory, so detection
+   * must scan candidate transcripts for an embedded workspace path.
    */
-  async detectSession(_projectPath: string): Promise<boolean> {
+  async detectSession(projectPath: string): Promise<boolean> {
     const fsProvider = this.projectScanner.getFileSystemProvider();
     const conversationsDir = path.join(
       os.homedir(),
@@ -79,7 +81,15 @@ export class AntigravityAdapter implements IAgentProvider {
       'antigravity-ide',
       'conversations',
     );
-    return fsProvider.exists(conversationsDir);
+    if (!(await fsProvider.exists(conversationsDir))) {
+      return false;
+    }
+
+    return this.directoryContainsWorkspace(
+      conversationsDir,
+      this.normaliseWorkspacePath(projectPath),
+      fsProvider,
+    );
   }
 
   /**
@@ -614,7 +624,7 @@ export class AntigravityAdapter implements IAgentProvider {
       // probe runs before per-entry parsing.
       const pattern = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
       const match = pattern.exec(rawContent);
-      if (match && match[1]) {
+      if (match?.[1]) {
         try {
           // Re-use JSON's string decoding so escape sequences round-trip.
           const decoded = JSON.parse(`"${match[1]}"`) as string;
@@ -722,5 +732,63 @@ export class AntigravityAdapter implements IAgentProvider {
       // `[object Object]` default leak through.
       return '[unserializable result]';
     }
+  }
+
+  private async directoryContainsWorkspace(
+    dirPath: string,
+    workspacePath: string,
+    fsProvider: FileSystemProvider,
+    depth = 0,
+  ): Promise<boolean> {
+    if (depth > 6) return false;
+
+    let entries;
+    try {
+      entries = await fsProvider.readdir(dirPath);
+    } catch {
+      return false;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+
+      if (entry.isDirectory()) {
+        if (await this.directoryContainsWorkspace(fullPath, workspacePath, fsProvider, depth + 1)) {
+          return true;
+        }
+        continue;
+      }
+
+      if (!entry.isFile() || !this.looksLikeConversationLog(entry.name)) {
+        continue;
+      }
+
+      try {
+        const content = await fsProvider.readFile(fullPath, 'utf-8');
+        const embeddedWorkspace = this.probeWorkspacePath(content);
+        if (
+          embeddedWorkspace &&
+          this.normaliseWorkspacePath(embeddedWorkspace) === workspacePath
+        ) {
+          return true;
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return false;
+  }
+
+  private looksLikeConversationLog(fileName: string): boolean {
+    return (
+      /\.(json|jsonl|ndjson)$/i.test(fileName) ||
+      /(transcript|conversation|session|history|event|log)/i.test(fileName)
+    );
+  }
+
+  private normaliseWorkspacePath(value: string): string {
+    const normalised = path.resolve(value);
+    return process.platform === 'win32' ? normalised.toLowerCase() : normalised;
   }
 }

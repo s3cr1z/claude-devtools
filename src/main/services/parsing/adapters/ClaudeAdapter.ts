@@ -7,6 +7,7 @@
  */
 
 import { analyzeSessionFileMetadata } from '@main/utils/jsonl';
+import { encodePath } from '@main/utils/pathDecoder';
 
 import { readAllClaudeMdFiles } from '../ClaudeMdReader';
 import { SessionParser } from '../SessionParser';
@@ -29,12 +30,14 @@ export class ClaudeAdapter implements IAgentProvider {
 
   /**
    * Detect whether Claude Code has any sessions for the given workspace.
-   * For now this simply checks that the Claude projects directory exists.
+   * Claude stores sessions under `~/.claude/projects/<encoded-workspace>/`,
+   * so detection needs to match the specific workspace rather than merely
+   * checking whether the global Claude root exists.
    */
-  async detectSession(_projectPath: string): Promise<boolean> {
+  async detectSession(projectPath: string): Promise<boolean> {
     const fsProvider = this.projectScanner.getFileSystemProvider();
     const projectsDir = this.projectScanner.getProjectsDir();
-    return fsProvider.exists(projectsDir);
+    return fsProvider.exists(`${projectsDir}/${encodePath(projectPath)}`);
   }
 
   /**
